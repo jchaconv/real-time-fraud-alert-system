@@ -1,0 +1,29 @@
+
+* Imperative programming uses a thread per request(Tomcat).
+* Reactive programming uses a loop of events(Netty) with no blocking threads.
+
+***********************************************************************
+
+"Real-Time Fraud Alert System"
+
+Componentes Técnicos de la Solución
+
+1. Ingesta: Transaction-Producer (WebFlux + Kafka)
+    En lugar de un controlador REST tradicional, este servicio manejará las transacciones entrantes de forma asíncrona.
+    Tecnología: Spring WebFlux + Reactor Kafka.
+    Clave: El uso de KafkaSender de Project Reactor permite que el envío del mensaje sea una operación no bloqueante que devuelve un Mono<SenderResult<Void>>.
+
+2. El Cerebro: Fraud-Processor (Stream Processing)
+    Este es el corazón reactivo. Consumirá el flujo de Kafka como un Flux<Transaction>.
+    Estrategia de Ventana (Windowing): Podrías usar operadores como window() o buffer() para analizar, por ejemplo, si un usuario ha hecho más de 5 transacciones en los últimos 30 segundos (detección de patrones).
+    Backpressure: Si Kafka envía datos más rápido de lo que tu lógica de fraude puede procesar, el flujo reactivo gestionará la demanda para no desbordar la memoria (Heap).
+
+3. Persistencia: R2DBC y Redis Reactivo
+    Aquí es donde muchos fallan. Si usas Hibernate tradicional (JDBC), bloqueas los hilos de Netty.
+    R2DBC (Reactive Relational Database Connectivity): Para persistir las transacciones sospechosas en PostgreSQL sin bloquear.
+    Spring Data Reactive Redis: Para consultar en milisegundos las "listas negras" o límites de crédito.
+
+4. Observabilidad (Tu especialidad)
+    Dado que en el mundo reactivo el "Stack Trace" tradicional se vuelve confuso (porque los hilos saltan de una tarea a otra), la arquitectura incluirá:
+    Micrometer Tracing: Para propagar el traceId a través de los flujos asíncronos.
+    Kibana/Dynatrace: Para monitorear el rendimiento de los Event Loops.
