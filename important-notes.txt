@@ -42,11 +42,84 @@ Para testear:
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT customer_id, daily_max_amount FROM customer_limits;"
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT count(*) FROM transactions;"
 
-Configurar healt-check para evitar caídas de app si la bd no está disponible o aún está levantando
+Probar fraud-detection-service:
+
+curl -X POST http://localhost:8081/api/v1/transactions \
+-H "Content-Type: application/json" \
+-d '{
+    "transactionId": "TXN-2026-WEB-001",
+    "customerId": "CUST-001",
+    "accountId": "ACC-101",
+    "amount": 500.00,
+    "currency": "PEN",
+    "operationType": "DEBIT",
+    "channel": "WEB"
+}'
+
 
 ***********************************************************************
 
 Datos nuevos e importantes:
 
-ISO Codes: Usar mcc (Merchant Category Code) es vital; si un cliente de Lima compra en una joyería en Rusia 5 minutos después de comprar un café en San Isidro, tu lógica reactiva detectará el fraude de inmediato.
-Índices para no hacer full table scan sino ir a los registros adecuados en millis
+* ISO Codes: Usar mcc (Merchant Category Code) es vital; si un cliente de Lima compra en una joyería en Rusia 5 minutos después de comprar un café en San Isidro, tu lógica reactiva detectará el fraude de inmediato.
+* Índices para no hacer full table scan sino ir a los registros adecuados en millis
+* Configurar healt-check(docker-compose) para evitar caídas de app si la bd no está disponible o aún está levantando
+* Non-blocking I/O: Al devolver Mono<TransactionEntity> en el Controller, el hilo de Netty no se queda esperando a que la base de datos responda. Se libera inmediatamente para atender otras peticiones y vuelve cuando los datos están listos.
+
+
+
+
+
+
+***********************************************************************
+
+Operadores
+
+1. map
+Se usa para transformar los elementos de un flujo uno a uno. Toma un valor, le aplica una función y devuelve el nuevo valor.
+
+Analogía: Tienes una lista de precios en soles y los multiplicas todos por el tipo de cambio para obtenerlos en dólares.
+
+Ejemplo:
+Flux<String> nombres = Flux.just("julio", "chacon");
+Flux<String> enMayusculas = nombres.map(n -> n.toUpperCase());
+// Resultado: "JULIO", "CHACON"
+
+------
+
+2. flatMap
+A diferencia de map, flatMap se usa cuando la transformación devuelve otro flujo (un Mono o Flux) en lugar de un valor simple. Es ideal para llamadas asíncronas encadenadas (como ir a la DB tras recibir un ID).
+
+Dato clave: No garantiza el orden original de los elementos, ya que procesa las suscripciones en paralelo.
+
+Ejemplo:
+Flux<String> ids = Flux.just("ID-1", "ID-2");
+Flux<User> usuarios = ids.flatMap(id -> service.findUserById(id)); 
+// findUserById devuelve un Mono<User>, flatMap lo "aplana" para que no sea Flux<Mono<User>>
+
+------
+
+3. switchIfEmpty
+Es el "Plan B". Si el flujo original llega al final sin haber emitido ningún dato (está vacío), este operador salta y ejecuta un flujo alternativo.
+
+Uso común: Buscar en caché; si no hay nada, buscar en la base de datos de Oracle.
+
+Ejemplo:
+Mono<String> cache = Mono.empty();
+Mono<String> resultado = cache.switchIfEmpty(Mono.just("Dato de la DB"));
+// Resultado: "Dato de la DB"
+
+-------
+
+4. zip
+Se utiliza para combinar dos o más flujos. Espera a que todos los flujos tengan un elemento disponible y luego los une en un nuevo objeto (como una Tuple o un objeto personalizado).
+
+Analogía: Como una cremallera (zipper); necesitas ambos lados para avanzar.
+
+Ejemplo:
+Mono<String> nombre = Mono.just("Julio");
+Mono<String> cargo = Mono.just("Backend Dev");
+
+Mono<String> combinado = Mono.zip(nombre, cargo)
+    .map(tuple -> tuple.getT1() + " es " + tuple.getT2());
+// Resultado: "Julio es Backend Dev"
