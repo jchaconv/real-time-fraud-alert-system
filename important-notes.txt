@@ -2,6 +2,10 @@
 * Imperative programming uses a thread per request(Tomcat).
 * Reactive programming uses a loop of events(Netty) with no blocking threads.
 
+* Traditional JDBC uses blocking threads with HikariCP
+* R2DBC uses a Reactive Connection Pool that keeps open connections (async)
+
+
 ***********************************************************************
 
 "Real-Time Fraud Alert System"
@@ -27,3 +31,22 @@ Componentes Técnicos de la Solución
     Dado que en el mundo reactivo el "Stack Trace" tradicional se vuelve confuso (porque los hilos saltan de una tarea a otra), la arquitectura incluirá:
     Micrometer Tracing: Para propagar el traceId a través de los flujos asíncronos.
     Kibana/Dynatrace: Para monitorear el rendimiento de los Event Loops.
+
+***********************************************************************
+
+Levantar base de datos postgres:
+
+docker-compose up -d
+
+Para testear:
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT customer_id, daily_max_amount FROM customer_limits;"
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT count(*) FROM transactions;"
+
+Configurar healt-check para evitar caídas de app si la bd no está disponible o aún está levantando
+
+***********************************************************************
+
+Datos nuevos e importantes:
+
+ISO Codes: Usar mcc (Merchant Category Code) es vital; si un cliente de Lima compra en una joyería en Rusia 5 minutos después de comprar un café en San Isidro, tu lógica reactiva detectará el fraude de inmediato.
+Índices para no hacer full table scan sino ir a los registros adecuados en millis
