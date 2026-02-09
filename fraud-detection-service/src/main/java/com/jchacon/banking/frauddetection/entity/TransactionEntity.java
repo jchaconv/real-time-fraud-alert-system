@@ -1,7 +1,11 @@
-package com.jchacon.banking.frauddetection.model;
+package com.jchacon.banking.frauddetection.entity;
 
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 import org.springframework.data.relational.core.mapping.Column;
 import java.math.BigDecimal;
@@ -13,7 +17,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table("transactions")
-public class TransactionEntity {
+public class TransactionEntity implements Persistable<UUID> {
 
     @Id
     private UUID id;
@@ -61,9 +65,30 @@ public class TransactionEntity {
     private String description;
 
     @Column("created_at")
+    @CreatedDate // Automatically sets the date when the record is inserted
     private LocalDateTime createdAt;
 
     @Column("updated_at")
+    @LastModifiedDate // Automatically updates the date when the record is modified
     private LocalDateTime updatedAt;
 
+    /*
+     * R2DBC specific: Persistable implementation ensures that
+     * Spring Data knows when to perform an INSERT vs UPDATE.
+     */
+    @Transient // This field is not persisted in the database
+    private boolean isNew = true;
+
+    @Override
+    public boolean isNew() {
+        return isNew || id == null;
+    }
+
+    /*
+     * Useful for setting the state after loading from DB
+     */
+    public TransactionEntity setAsNotNew() {
+        this.isNew = false;
+        return this;
+    }
 }

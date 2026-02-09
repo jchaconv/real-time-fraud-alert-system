@@ -56,6 +56,8 @@ curl -X POST http://localhost:8081/api/v1/transactions \
     "channel": "WEB"
 }'
 
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM customer_limits WHERE customer_id = 'CUST-001';"
+
 
 ***********************************************************************
 
@@ -65,8 +67,8 @@ Datos nuevos e importantes:
 * Índices para no hacer full table scan sino ir a los registros adecuados en millis
 * Configurar healt-check(docker-compose) para evitar caídas de app si la bd no está disponible o aún está levantando
 * Non-blocking I/O: Al devolver Mono<TransactionEntity> en el Controller, el hilo de Netty no se queda esperando a que la base de datos responda. Se libera inmediatamente para atender otras peticiones y vuelve cuando los datos están listos.
-
-
+* MDC (Mapped Diagnostic Context) - correlation id es necesario configurarlo porque se pierde en el contexto reactivo. Lo hice con deferContextual(se tendría que implementar en cada método). Y también con Micrometer.
+* Persistable en el Entity para que Spring sepa si es un INSERT o UPDATE
 
 
 

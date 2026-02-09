@@ -1,6 +1,6 @@
 package com.jchacon.banking.frauddetection.repository;
 
-import com.jchacon.banking.frauddetection.model.CustomerLimitEntity;
+import com.jchacon.banking.frauddetection.entity.CustomerLimitEntity;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
 

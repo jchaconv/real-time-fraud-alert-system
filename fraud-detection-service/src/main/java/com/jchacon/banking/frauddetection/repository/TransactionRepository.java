@@ -1,6 +1,6 @@
 package com.jchacon.banking.frauddetection.repository;
 
-import com.jchacon.banking.frauddetection.model.TransactionEntity;
+import com.jchacon.banking.frauddetection.entity.TransactionEntity;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
 

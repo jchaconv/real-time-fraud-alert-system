@@ -1,6 +1,7 @@
 package com.jchacon.banking.frauddetection.controller;
 
-import com.jchacon.banking.frauddetection.model.TransactionEntity;
+import com.jchacon.banking.frauddetection.model.ProcessTransactionRequestDTO;
+import com.jchacon.banking.frauddetection.model.ProcessTransactionResponseDTO;
 import com.jchacon.banking.frauddetection.service.FraudService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,11 +20,11 @@ public class TransactionController {
     /**
      * Receives a new transaction, processes it through the fraud engine, and persists the result.
      * * @param transaction The transaction data provided in the request body.
-     * @return A Mono emitting the processed TransactionEntity.
+     * @return A Mono emitting the processed ProcessTransactionRequestDTO.
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Mono<TransactionEntity> createTransaction(@Valid @RequestBody TransactionEntity transaction) {
+    public Mono<ProcessTransactionResponseDTO> createTransaction(@Valid @RequestBody ProcessTransactionRequestDTO transaction) {
         return fraudService.processTransaction(transaction);
     }
 

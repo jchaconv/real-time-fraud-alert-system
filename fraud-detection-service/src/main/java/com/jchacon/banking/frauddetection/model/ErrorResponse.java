@@ -8,8 +8,9 @@ import java.time.LocalDateTime;
 @Builder
 public class ErrorResponse {
 
-    String code;
-    String message;
+    String code;      // E.g., "REJECTED_LIMIT"
+    String message;   // E.g., "Daily transaction limit exceeded"
+    String responseCode; // E.g., "51" (New field)
     LocalDateTime timestamp;
 
 }

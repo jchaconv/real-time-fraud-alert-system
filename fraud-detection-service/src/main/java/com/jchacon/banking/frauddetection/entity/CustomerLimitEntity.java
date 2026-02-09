@@ -1,4 +1,4 @@
-package com.jchacon.banking.frauddetection.model;
+package com.jchacon.banking.frauddetection.entity;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
