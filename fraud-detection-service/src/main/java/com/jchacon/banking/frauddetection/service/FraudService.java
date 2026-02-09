@@ -28,7 +28,8 @@ public class FraudService {
     private final CustomerLimitRepository customerLimitRepository;
 
     /**
-     * Evaluates the transaction and updates the customer's daily spent balance if approved.
+     * Entry point for transaction processing.
+     * Implements Idempotency to prevent double-spending or duplicate records.
      */
     @Transactional // Ensures both database operations complete or fail together
     public Mono<ProcessTransactionResponseDTO> processTransaction(ProcessTransactionRequestDTO request) {
@@ -36,10 +37,27 @@ public class FraudService {
         // Get the correlation ID from MDC (already populated by Micrometer Context Propagation)
         String activeCorrelationId = MDC.get(CorrelationFilter.CORRELATION_ID_KEY);
 
-        TransactionEntity transaction = mapRequestToEntity(request, activeCorrelationId);
+        // Idempotency Check: First, look for the transactionId in our records
+        return transactionRepository.findByTransactionId(request.getTransactionId())
+                .map(existingEntity -> {
+                    log.warn("Idempotency Triggered: Transaction {} already processed. Returning cached result.",
+                            request.getTransactionId());
+                    return mapToResponseDTO(existingEntity);
+                })
+                /* * 2. If not found, proceed to process.
+                 * Mono.defer is crucial here: it ensures executeProcessing() is only
+                 * called if the transaction does NOT exist in the database.
+                 */
+                .switchIfEmpty(Mono.defer(() -> executeProcessing(request, activeCorrelationId)));
+    }
 
-        log.info("Processing transaction: {}", transaction.getTransactionId());
-
+    /**
+     * Internal logic for a new transaction evaluation.
+     * Evaluates the transaction and updates the customer's daily spent balance if approved.
+     */
+    private Mono<ProcessTransactionResponseDTO> executeProcessing(ProcessTransactionRequestDTO request, String correlationId) {
+        TransactionEntity transaction = mapRequestToEntity(request, correlationId);
+        log.info("Processing new transaction: {}", transaction.getTransactionId());
         return customerLimitRepository.findById(transaction.getCustomerId())
                 .flatMap(limit -> {
                     BigDecimal totalSpent = limit.getCurrentDailySpent().add(transaction.getAmount());
