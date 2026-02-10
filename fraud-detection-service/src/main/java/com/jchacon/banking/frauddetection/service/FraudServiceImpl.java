@@ -79,8 +79,12 @@ public class FraudServiceImpl implements FraudService {
                 // Sending event to Kafka before answer to the client
                 .flatMap(savedEntity ->
                         eventProducer.sendTransactionEvent(mapToEvent(savedEntity))
-                                .thenReturn(mapToResponseDTO(savedEntity))
-                )
+                                .timeout(Duration.ofSeconds(2)) // Kafka have only 2 seconds
+                                .onErrorResume(e -> {
+                                    log.error("Kafka failed, but transaction is saved. Error: {}", e.getMessage());
+                                    return Mono.empty(); // Ignoring the Kafka error to have no effect on the client's response
+                                })
+                                .thenReturn(mapToResponseDTO(savedEntity)))
                 // Applying timeout to the entire flow or individual DB saves
                 .timeout(Duration.ofSeconds(5))
                 .switchIfEmpty(Mono.error(() -> {
