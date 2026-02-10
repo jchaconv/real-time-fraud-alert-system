@@ -6,17 +6,26 @@ spring:
     name: notification-service
 
   kafka:
-    bootstrap-servers: 127.0.0.1:9092
+    bootstrap-servers: 172.30.84.55:9092
     consumer:
       group-id: notification-group
       # earliest: Read from the first available message if the group is new
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
         # IMPORTANT: Trust to deserialize the JSON to the DTO
-        spring.json.trusted.packages: "com.jchacon.banking.notification.event"
-
+        # Defining the real deserializer inside the wrapper
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        # We map the message to our local class regardless of the source package
+        spring.json.value.default.type: "com.jchacon.banking.notification.event.TransactionEvent"
+        # We trust all packages to avoid the "not in trusted packages" error.
+        spring.json.trusted.packages: "*"
+        # We ignore the type information that comes in the producer headers
+        spring.json.use.type.headers: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 logging:
   level:
     com.jchacon.banking.notification: DEBUG
