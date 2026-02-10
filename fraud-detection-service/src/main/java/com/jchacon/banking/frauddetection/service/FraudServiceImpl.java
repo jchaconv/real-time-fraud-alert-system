@@ -1,6 +1,7 @@
 package com.jchacon.banking.frauddetection.service;
 
 import com.jchacon.banking.frauddetection.config.CorrelationFilter;
+import com.jchacon.banking.frauddetection.event.TransactionEvent;
 import com.jchacon.banking.frauddetection.exception.BusinessException;
 import com.jchacon.banking.frauddetection.exception.TechnicalException;
 import com.jchacon.banking.frauddetection.entity.CustomerLimitEntity;
@@ -9,6 +10,7 @@ import com.jchacon.banking.frauddetection.model.ProcessTransactionRequestDTO;
 import com.jchacon.banking.frauddetection.model.ProcessTransactionResponseDTO;
 import com.jchacon.banking.frauddetection.model.enums.OperationType;
 import com.jchacon.banking.frauddetection.model.enums.TransactionStatus;
+import com.jchacon.banking.frauddetection.producer.FraudEventProducer;
 import com.jchacon.banking.frauddetection.repository.CustomerLimitRepository;
 import com.jchacon.banking.frauddetection.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDateTime;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -28,6 +31,7 @@ public class FraudServiceImpl implements FraudService {
 
     private final TransactionRepository transactionRepository;
     private final CustomerLimitRepository customerLimitRepository;
+    private final FraudEventProducer eventProducer;
 
     /**
      * Entry point for transaction processing.
@@ -46,8 +50,7 @@ public class FraudServiceImpl implements FraudService {
                             request.getTransactionId());
                     return mapToResponseDTO(existingEntity);
                 })
-                /* * 2. If not found, proceed to process.
-                 * Mono.defer is crucial here: it ensures executeProcessing() is only
+                /* If not found, proceed to process. Mono.defer is crucial here: it ensures executeProcessing() is only
                  * called if the transaction does NOT exist in the database.
                  */
                 .switchIfEmpty(Mono.defer(() -> executeProcessing(request, activeCorrelationId)));
@@ -66,7 +69,6 @@ public class FraudServiceImpl implements FraudService {
                     // Business Rule: Determine if this operation should impact the daily limit
                     BigDecimal impactValue = calculateLimitImpact(transaction);
                     BigDecimal projectedSpent = limit.getCurrentDailySpent().add(impactValue);
-
                     // Validation against daily threshold
                     if (projectedSpent.compareTo(limit.getDailyMaxAmount()) > 0) {
                         return handleRejectedTransaction(transaction, projectedSpent);
@@ -74,9 +76,13 @@ public class FraudServiceImpl implements FraudService {
                         return handleApprovedTransaction(transaction, limit, projectedSpent);
                     }
                 })
+                // Sending event to Kafka before answer to the client
+                .flatMap(savedEntity ->
+                        eventProducer.sendTransactionEvent(mapToEvent(savedEntity))
+                                .thenReturn(mapToResponseDTO(savedEntity))
+                )
                 // Applying timeout to the entire flow or individual DB saves
                 .timeout(Duration.ofSeconds(5))
-                .map(this::mapToResponseDTO) // Mapping to Response DTO
                 .switchIfEmpty(Mono.error(() -> {
                     log.error("Validation failed: Customer {} not found", transaction.getCustomerId());
                     return new BusinessException(TransactionStatus.CUSTOMER_NOT_FOUND, "Customer not found in system");
@@ -171,6 +177,18 @@ public class FraudServiceImpl implements FraudService {
                 .responseCode(entity.getResponseCode())
                 .description(entity.getDescription())
                 .createdAt(entity.getCreatedAt())
+                .build();
+    }
+
+    private TransactionEvent mapToEvent(TransactionEntity entity) {
+        return TransactionEvent.builder()
+                .transactionId(entity.getTransactionId())
+                .customerId(entity.getCustomerId())
+                .amount(entity.getAmount())
+                .status(entity.getStatus())
+                .responseCode(entity.getResponseCode())
+                .timestamp(entity.getCreatedAt() != null ? entity.getCreatedAt() : LocalDateTime.now())
+                .correlationId(entity.getCorrelationId())
                 .build();
     }
 }

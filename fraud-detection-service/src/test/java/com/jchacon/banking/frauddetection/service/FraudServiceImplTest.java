@@ -5,6 +5,7 @@ import com.jchacon.banking.frauddetection.entity.TransactionEntity;
 import com.jchacon.banking.frauddetection.exception.TechnicalException;
 import com.jchacon.banking.frauddetection.model.ProcessTransactionRequestDTO;
 import com.jchacon.banking.frauddetection.model.enums.OperationType;
+import com.jchacon.banking.frauddetection.producer.FraudEventProducer;
 import com.jchacon.banking.frauddetection.repository.CustomerLimitRepository;
 import com.jchacon.banking.frauddetection.repository.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +32,9 @@ class FraudServiceImplTest {
 
     @Mock
     private CustomerLimitRepository customerLimitRepository;
+
+    @Mock
+    private FraudEventProducer eventProducer;
 
     @InjectMocks
     private FraudServiceImpl fraudService;
@@ -63,12 +67,13 @@ class FraudServiceImplTest {
         when(customerLimitRepository.save(any())).thenReturn(Mono.just(limit));
         when(transactionRepository.save(any())).thenAnswer(i -> Mono.just(i.getArgument(0)));
 
+        when(eventProducer.sendTransactionEvent(any())).thenReturn(Mono.empty());
+
         // Act & Assert
         StepVerifier.create(fraudService.processTransaction(request))
-                .expectNextMatches(response -> {
-                    return response.getStatus().equals("APPROVED") &&
-                            response.getResponseCode().equals("00");
-                })
+                .expectNextMatches(response ->
+                        response.getStatus().equals("APPROVED") &&
+                                response.getResponseCode().equals("00"))
                 .verifyComplete();
 
         verify(customerLimitRepository).save(argThat(l -> l.getCurrentDailySpent().compareTo(new BigDecimal("100.00")) == 0));
@@ -83,13 +88,13 @@ class FraudServiceImplTest {
         when(customerLimitRepository.findById(anyString())).thenReturn(Mono.just(limit));
         when(transactionRepository.save(any())).thenAnswer(i -> Mono.just(i.getArgument(0)));
 
+        when(eventProducer.sendTransactionEvent(any())).thenReturn(Mono.empty());
+
         // Act & Assert
         StepVerifier.create(fraudService.processTransaction(request))
-                .expectNextMatches(response -> {
-                    // Better approach: Validate by ResponseCode "51" and partial status
-                    return "51".equals(response.getResponseCode()) &&
-                            response.getStatus().startsWith("REJECTED");
-                })
+                .expectNextMatches(response ->
+                        "51".equals(response.getResponseCode()) &&
+                                response.getStatus().startsWith("REJECTED"))
                 .verifyComplete();
 
         // Verify limit safety

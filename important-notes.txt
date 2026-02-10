@@ -59,9 +59,33 @@ curl -X POST http://localhost:8081/api/v1/transactions \
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM customer_limits WHERE customer_id = 'CUST-001';"
 
 
+- Clean up:
+        
+        rm -rf /tmp/kafka-logs /tmp/zookeeper /tmp/kraft-combined-logs
+
+    - KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+    - echo $KAFKA_CLUSTER_ID
+    - bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties
+    - bin/kafka-server-start.sh config/kraft/server.properties
+
+    - bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+    - bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-topic --from-beginning
+
+    - bin/kafka-server-stop.sh
+
+
+
+
 ***********************************************************************
 
 Datos nuevos e importantes:
+
+Reactive Streams: estándar, conjunto de 4 interfaces: Publisher, Subscriber, Subscription y Processor) que definen cómo deben fluir los datos de forma asíncrona y con Backpressure (capacidad del consumidor para avisar que está saturado).
+
+Project Reactor,: Librería de Tipos,Flujos de datos (Mono/Flux)
+Spring WebFlux: Framework Web, Peticiones HTTP, Rutas, API REST
+RxJava: Librería de Tipos, Flujos de datos (Observable)
 
 * ISO Codes: Usar mcc (Merchant Category Code) es vital; si un cliente de Lima compra en una joyería en Rusia 5 minutos después de comprar un café en San Isidro, tu lógica reactiva detectará el fraude de inmediato.
 * Índices para no hacer full table scan sino ir a los registros adecuados en millis
@@ -70,8 +94,8 @@ Datos nuevos e importantes:
 * MDC (Mapped Diagnostic Context) - correlation id es necesario configurarlo porque se pierde en el contexto reactivo. Lo hice con deferContextual(se tendría que implementar en cada método). Y también con Micrometer.
 * Persistable en el Entity para que Spring sepa si es un INSERT o UPDATE
 * Mono.defer() En programación reactiva, si no usas defer, el código dentro del switchIfEmpty se prepararía (instanciaría) incluso si la transacción ya existe. defer asegura que la lógica de negocio solo se ejecute si realmente la transacción es nueva.
-* http://localhost:8080/swagger-ui.html
-* 
+* http://localhost:8081/swagger-ui.html
+* map: para conversiones simple sincronas | flatmap: para seguir realizando operaciones async
 
 
 ***********************************************************************
