@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -47,8 +48,20 @@ public class GlobalExceptionHandler {
     // Generic Exception handler (Catch-all)
     @ExceptionHandler(Exception.class)
     public Mono<ResponseEntity<ErrorResponse>> handleGenericException(Exception ex) {
-        log.error("Unexpected error: ", ex);
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "SYSTEM_ERROR", "An unexpected error occurred", "99");
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String code = "SYSTEM_ERROR";
+        String message = "An unexpected error occurred";
+        String responseCode = "99";
+
+        // If it's a Spring native exception (like 404 or 405), respect its status
+        if (ex instanceof ResponseStatusException rsEx) {
+            status = HttpStatus.valueOf(rsEx.getStatusCode().value());
+            message = rsEx.getReason() != null ? rsEx.getReason() : rsEx.getMessage();
+            code = "HTTP_ERROR_" + status.value();
+        } else {
+            log.error("Unexpected system error: ", ex);
+        }
+        return buildResponse(status, code, message, responseCode);
     }
 
     private Mono<ResponseEntity<ErrorResponse>> buildResponse(HttpStatus status, String code, String message, String responseCode) {

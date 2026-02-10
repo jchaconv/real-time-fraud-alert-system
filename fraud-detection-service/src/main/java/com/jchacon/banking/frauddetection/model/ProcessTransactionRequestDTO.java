@@ -4,6 +4,7 @@ import com.jchacon.banking.frauddetection.model.enums.ChannelType;
 import com.jchacon.banking.frauddetection.model.enums.CurrencyType;
 import com.jchacon.banking.frauddetection.model.enums.OperationType;
 import com.jchacon.banking.frauddetection.validation.ValueInEnum;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -37,10 +38,12 @@ public class ProcessTransactionRequestDTO {
     @DecimalMin(value = "0.01", message = "minimum amount allowed is 0.01")
     private BigDecimal amount;
 
+    @Schema(example = "WEB", allowableValues = {"USD", "PEN", "EUR"})
     @NotBlank(message = "currency is required")
     @ValueInEnum(enumClass = CurrencyType.class, message = "invalid currency type.")
     private String currency; // E.g., USD, PEN, EUR
 
+    @Schema(example = "WEB", allowableValues = {"DEBIT", "CREDIT", "TRANSFER", "CASH_WITHDRAWAL"})
     @NotBlank(message = "operationType is required")
     @ValueInEnum(enumClass = OperationType.class, message = "invalid operation type.")
     private String operationType; // E.g., DEBIT, CREDIT
@@ -61,6 +64,7 @@ public class ProcessTransactionRequestDTO {
             message = "invalid ipAddress format")
     private String ipAddress;
 
+    @Schema(example = "WEB", allowableValues = {"WEB", "MOBILE", "ATM", "POS"})
     @NotBlank(message = "channel is required")
     @ValueInEnum(enumClass = ChannelType.class, message = "invalid channel.")
     private String channel;

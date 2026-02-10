@@ -69,8 +69,9 @@ Datos nuevos e importantes:
 * Non-blocking I/O: Al devolver Mono<TransactionEntity> en el Controller, el hilo de Netty no se queda esperando a que la base de datos responda. Se libera inmediatamente para atender otras peticiones y vuelve cuando los datos están listos.
 * MDC (Mapped Diagnostic Context) - correlation id es necesario configurarlo porque se pierde en el contexto reactivo. Lo hice con deferContextual(se tendría que implementar en cada método). Y también con Micrometer.
 * Persistable en el Entity para que Spring sepa si es un INSERT o UPDATE
-
-
+* Mono.defer() En programación reactiva, si no usas defer, el código dentro del switchIfEmpty se prepararía (instanciaría) incluso si la transacción ya existe. defer asegura que la lógica de negocio solo se ejecute si realmente la transacción es nueva.
+* http://localhost:8080/swagger-ui.html
+* 
 
 
 ***********************************************************************

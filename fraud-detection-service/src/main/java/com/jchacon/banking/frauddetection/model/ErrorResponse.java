@@ -1,11 +1,16 @@
 package com.jchacon.banking.frauddetection.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Value;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
-@Value
+@Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ErrorResponse {
 
     String code;      // E.g., "REJECTED_LIMIT"
