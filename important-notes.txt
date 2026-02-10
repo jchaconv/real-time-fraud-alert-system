@@ -6,6 +6,10 @@
 * R2DBC uses a Reactive Connection Pool that keeps open connections (async)
 
 
+01-process-transaction
+02-
+
+
 ***********************************************************************
 
 "Real-Time Fraud Alert System"
@@ -58,21 +62,34 @@ curl -X POST http://localhost:8081/api/v1/transactions \
 
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM customer_limits WHERE customer_id = 'CUST-001';"
 
+       
+- rm -rf /tmp/kafka-logs /tmp/zookeeper /tmp/kraft-combined-logs
+- KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
+- echo $KAFKA_CLUSTER_ID
+- bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties
+- bin/kafka-server-start.sh config/kraft/server.properties
 
-- Clean up:
-        
-        rm -rf /tmp/kafka-logs /tmp/zookeeper /tmp/kraft-combined-logs
+- bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+- bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic fraud-detection-events --from-beginning
 
-    - KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
-    - echo $KAFKA_CLUSTER_ID
-    - bin/kafka-storage.sh format -t $KAFKA_CLUSTER_ID -c config/kraft/server.properties
-    - bin/kafka-server-start.sh config/kraft/server.properties
+bin/kafka-console-consumer.sh --bootstrap-server 127.0.0.1:9092 \
+--topic fraud-detection-events \
+--from-beginning \
+--formatter kafka.tools.DefaultMessageFormatter \
+--property print.key=true \
+--property print.value=true \
+--property key.deserializer=org.apache.kafka.common.serialization.StringDeserializer \
+--property value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
 
-    - bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
 
-    - bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic my-topic --from-beginning
+- bin/kafka-server-stop.sh
 
-    - bin/kafka-server-stop.sh
+- to configure application.properties, for the wsl use: ip addr show, use the eth0  → spring.kafka.bootstrap-servers=172.30.84.55:9092
+- edit server.properties with this:
+    listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+    advertised.listeners=PLAINTEXT://172.30.84.55:9092
+
+
 
 
 

@@ -1,0 +1,25 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: notification-service
+
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    consumer:
+      group-id: notification-group
+      # earliest: Read from the first available message if the group is new
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        # IMPORTANT: Trust to deserialize the JSON to the DTO
+        spring.json.trusted.packages: "com.jchacon.banking.notification.event"
+
+logging:
+  level:
+    com.jchacon.banking.notification: DEBUG
+    org.springframework.kafka: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} [CORR-ID: %X{correlationId}] : %msg%n"
