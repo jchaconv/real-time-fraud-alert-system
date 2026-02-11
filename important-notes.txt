@@ -8,6 +8,7 @@
 
 01-process-transaction
 02-notification-service
+03-oauth2-jwt
 
 
 ***********************************************************************
@@ -148,7 +149,7 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
 * Mono.defer() En programación reactiva, si no usas defer, el código dentro del switchIfEmpty se prepararía (instanciaría) incluso si la transacción ya existe. defer asegura que la lógica de negocio solo se ejecute si realmente la transacción es nueva.
 * http://localhost:8081/swagger-ui.html
 * map: para conversiones simple sincronas | flatmap: para seguir realizando operaciones async
-
+* El bean authorizationServerSecurityFilterChain en auth-server activa por defecto la url que da el token
 
 ***********************************************************************
 
