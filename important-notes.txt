@@ -125,11 +125,6 @@ get idempotency:txn:TXN-ERROR-002
 ttl idempotency:txn:TXN-ERROR-002
 
 
-
-
-
-
-
 ***********************************************************************
 
 Datos nuevos e importantes:

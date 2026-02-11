@@ -1,15 +1,29 @@
 package com.jchacon.banking.frauddetection.config;
 
-import io.micrometer.context.ContextRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import jakarta.annotation.PostConstruct;
-import org.slf4j.MDC;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Hooks;
 
+/**
+ * Modern Observation Configuration for Spring Boot 3.4+.
+ * Ensures Trace IDs propagate through Reactive Streams (Flux/Mono).
+ */
+@RequiredArgsConstructor
 @Configuration
 public class ObservationConfig {
 
+    private final ObservationRegistry observationRegistry;
+
     @PostConstruct
+    public void init() {
+        // Essential: Enables automatic context propagation for Project Reactor
+        // This is what bridges Micrometer Trace IDs with MDC in WebFlux
+        Hooks.enableAutomaticContextPropagation();
+    }
+
+    /*@PostConstruct
     public void init() {
         // Map Reactor Context key to MDC key
         ContextRegistry.getInstance().registerThreadLocalAccessor(
@@ -21,5 +35,5 @@ public class ObservationConfig {
 
         // Enable automatic propagation through all operators
         Hooks.enableAutomaticContextPropagation();
-    }
+    }*/
 }

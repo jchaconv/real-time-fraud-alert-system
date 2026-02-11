@@ -1,6 +1,7 @@
 package com.jchacon.banking.frauddetection.service.impl;
 
-import com.jchacon.banking.frauddetection.config.CorrelationFilter;
+import io.micrometer.tracing.Tracer;
+
 import com.jchacon.banking.frauddetection.event.TransactionEvent;
 import com.jchacon.banking.frauddetection.exception.BusinessException;
 import com.jchacon.banking.frauddetection.exception.TechnicalException;
@@ -17,7 +18,6 @@ import com.jchacon.banking.frauddetection.service.FraudService;
 import com.jchacon.banking.frauddetection.service.IdempotencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
@@ -25,6 +25,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -36,6 +37,8 @@ public class FraudServiceImpl implements FraudService {
     private final FraudEventProducer eventProducer;
     private final IdempotencyService idempotencyService;
 
+    private final Tracer tracer;
+
     /**
      * Entry point for transaction processing.
      * Implements Idempotency to prevent double-spending or duplicate records.
@@ -43,15 +46,18 @@ public class FraudServiceImpl implements FraudService {
     @Transactional // Ensures both database operations complete or fail together
     public Mono<ProcessTransactionResponseDTO> processTransaction(ProcessTransactionRequestDTO request) {
         String txnId = request.getTransactionId();
-        // Get the correlation ID from MDC (already populated by Micrometer Context Propagation)
-        String activeCorrelationId = MDC.get(CorrelationFilter.CORRELATION_ID_KEY);
+
+        // Get the current technical Trace ID
+        String activeTraceId = tracer.currentSpan() != null ?
+                tracer.currentSpan().context().traceId() : "N/A";
+
         // Try to get from Redis Cache (Full JSON)
         return idempotencyService.getCachedResponse(txnId)
                 .doOnNext(res -> log.warn("Idempotency Triggered (Redis): Returning full cached response for {}", txnId))
                 // If NOT in Redis, check DB (Double check for safety)
                 .switchIfEmpty(Mono.defer(() -> fetchFromDbAndMap(txnId)))
                 // If NOT in DB, process normally
-                .switchIfEmpty(Mono.defer(() -> executeProcessing(request, activeCorrelationId)));
+                .switchIfEmpty(Mono.defer(() -> executeProcessing(request, activeTraceId)));
     }
 
     /**
@@ -70,9 +76,10 @@ public class FraudServiceImpl implements FraudService {
      * Internal logic for a new transaction evaluation.
      * Evaluates the transaction and updates the customer's daily spent balance if approved.
      */
-    private Mono<ProcessTransactionResponseDTO> executeProcessing(ProcessTransactionRequestDTO request, String correlationId) {
-        TransactionEntity transaction = mapRequestToEntity(request, correlationId);
-        log.info("Processing new transaction: {} | Type: {}", transaction.getTransactionId(), transaction.getOperationType());
+    private Mono<ProcessTransactionResponseDTO> executeProcessing(ProcessTransactionRequestDTO request, String traceId) {
+        // Map using the traceId as the correlationId for the Entity/Database
+        TransactionEntity transaction = mapRequestToEntity(request, traceId);
+        log.info("Processing new transaction: {} | Type: {} | Correlation: {}", transaction.getTransactionId(), transaction.getOperationType(), traceId);
         return customerLimitRepository.findById(transaction.getCustomerId())
                 .timeout(Duration.ofSeconds(2)) // Critical: Protects against slow DB lookups
                 .flatMap(limit -> {

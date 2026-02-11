@@ -1,5 +1,9 @@
 package com.jchacon.banking.frauddetection.service;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
+
 import com.jchacon.banking.frauddetection.entity.CustomerLimitEntity;
 import com.jchacon.banking.frauddetection.entity.TransactionEntity;
 import com.jchacon.banking.frauddetection.exception.TechnicalException;
@@ -15,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -40,6 +45,9 @@ class FraudServiceImplTest {
     @Mock
     private IdempotencyService idempotencyService;
 
+    @Mock
+    private Tracer tracer;
+
     @InjectMocks
     private FraudServiceImpl fraudService;
 
@@ -47,9 +55,19 @@ class FraudServiceImplTest {
     private CustomerLimitEntity limit;
 
     private static final String TXN_ID = "TXN-100";
+    private static final String MOCK_TRACE_ID = "698bfb95ee3cf3a1796c940d1123cfd8";
 
     @BeforeEach
     void setUp() {
+
+        //Setup Micrometer Tracing Mocks
+        Span mockSpan = Mockito.mock(Span.class);
+        TraceContext mockContext = Mockito.mock(TraceContext.class);
+
+        when(tracer.currentSpan()).thenReturn(mockSpan);
+        when(mockSpan.context()).thenReturn(mockContext);
+        when(mockContext.traceId()).thenReturn(MOCK_TRACE_ID);
+
         request = ProcessTransactionRequestDTO.builder()
                 .transactionId("TXN-100")
                 .customerId("CUST-777")
@@ -84,6 +102,7 @@ class FraudServiceImplTest {
                                 response.getResponseCode().equals("00"))
                 .verifyComplete();
 
+        verify(transactionRepository).save(argThat(t -> t.getCorrelationId() != null));
         verify(customerLimitRepository).save(argThat(l -> l.getCurrentDailySpent().compareTo(new BigDecimal("100.00")) == 0));
     }
 
