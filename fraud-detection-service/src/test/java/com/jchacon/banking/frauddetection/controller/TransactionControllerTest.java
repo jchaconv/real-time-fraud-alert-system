@@ -1,9 +1,13 @@
 package com.jchacon.banking.frauddetection.controller;
 
 import com.jchacon.banking.frauddetection.config.SecurityConfig;
+import com.jchacon.banking.frauddetection.config.SecurityExceptionHandler;
 import com.jchacon.banking.frauddetection.model.ProcessTransactionRequestDTO;
 import com.jchacon.banking.frauddetection.model.ProcessTransactionResponseDTO;
 import com.jchacon.banking.frauddetection.service.FraudService;
+
+import io.micrometer.tracing.Tracer;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,9 +29,12 @@ import static org.mockito.Mockito.when;
 // Standard import for Security Mocking in WebFlux
 import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockJwt;
 
-@Import(SecurityConfig.class) // Load security rules for the test context
+@Import({SecurityConfig.class, SecurityExceptionHandler.class})
 @WebFluxTest(controllers = {TransactionController.class, GlobalExceptionHandler.class},
-        properties = "spring.webflux.problemdetails.enabled=false") // IMPORTANT: Deactivate the default format
+        properties = {
+                "spring.webflux.problemdetails.enabled=false",
+                "management.tracing.enabled=false"
+        })
 @ImportAutoConfiguration(exclude = {R2dbcAutoConfiguration.class})
 class TransactionControllerTest {
 
@@ -36,6 +43,9 @@ class TransactionControllerTest {
 
     @MockitoBean
     private FraudService fraudService;
+
+    @MockitoBean
+    private Tracer tracer;
 
     @Test
     void shouldReturnOkWhenTransactionIsProcessed() {
