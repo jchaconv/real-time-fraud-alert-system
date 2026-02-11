@@ -9,6 +9,8 @@
 01-process-transaction
 02-notification-service
 03-oauth2-jwt
+04-observability-context-propagation
+05-kafka-retries-backoff
 
 
 ***********************************************************************
@@ -40,6 +42,12 @@ Componentes Técnicos de la Solución
 ***********************************************************************
 
 Levantar base de datos postgres:
+
+sudo rm -rf postgres-reactive   ----> borrar carpeta con contenido
+sudo mkdir postgres-reactive
+
+sudo chown -R jchaconv:jchaconv /home/jchaconv/postgres-reactive   ---> dar permisos sudo
+ls -ld postgres-reactive    --> ejecutar desde aquí /home/jchaconv/ para validar permisos
 
 docker-compose up -d
 
@@ -145,6 +153,18 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
 * http://localhost:8081/swagger-ui.html
 * map: para conversiones simple sincronas | flatmap: para seguir realizando operaciones async
 * El bean authorizationServerSecurityFilterChain en auth-server activa por defecto la url que da el token
+* Micrometer Tracing basado en OpenTelemetry/Brave. Observabilidad, propagation context.
+* traceId Es único para toda la transacción distribuida. Si la petición pasa por 5 microservicios, todos compartirán el mismo Trace ID. Sirve para correlacionar logs de distintos servicios.
+* spanId Es único para cada bloque de trabajo (unidad lógica). 
+* backoff: Es la estrategia de esperar un tiempo antes de reintentar una operación que falló.
+* backpressure: Es un mecanismo donde el Consumidor le dice al Productor: "¡Oye, vas muy rápido, no puedo procesar tanto!". En WebFlux: Si tu base de datos es lenta y están llegando miles de peticiones HTTP,
+  el driver R2DBC aplica backpressure hacia arriba para que Netty deje de aceptar nuevos bytes hasta que haya espacio en memoria.
+* circuit breaker: Es un patrón que evita que una aplicación intente realizar una operación que probablemente va a fallar. Tiene 3 estados:
+    - Closed (Cerrado): Todo bien, el tráfico fluye.
+    - Open (Abierto): Hubo demasiados errores. El circuito se "rompe" y falla inmediatamente sin siquiera intentar llamar al servicio (protege los recursos).
+    - Half-Open: Después de un tiempo, deja pasar unas pocas peticiones para ver si el servicio ya se recuperó.
+
+* Transactional Outbox Pattern
 
 ***********************************************************************
 

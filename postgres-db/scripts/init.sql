@@ -76,3 +76,15 @@ INSERT INTO transactions (transaction_id, correlation_id, account_id, customer_i
 -- Índices para optimizar el motor de fraude (Flux asíncronos)
 CREATE INDEX idx_transaction_customer ON transactions(customer_id);
 CREATE INDEX idx_transaction_created_at ON transactions(created_at);
+
+
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id SERIAL PRIMARY KEY,
+    transaction_id VARCHAR(50) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) DEFAULT 'FAILED', -- FAILED, RETRYING, PROCESSED
+    error_message TEXT,
+    retry_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
