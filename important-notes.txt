@@ -11,6 +11,7 @@
 03-oauth2-jwt
 04-observability-context-propagation
 05-kafka-retries-backoff
+06-transactional-outbox-pattern
 
 
 ***********************************************************************
@@ -72,6 +73,8 @@ curl -X POST http://localhost:8081/api/v1/transactions \
 
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM customer_limits WHERE customer_id = 'CUST-001';"
 
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM outbox_events;"
+
 
 -----------------------------------------
 
@@ -132,6 +135,7 @@ get idempotency:txn:TXN-ERROR-002
 # 4. Ver cuánto tiempo de vida le queda (en segundos)
 ttl idempotency:txn:TXN-ERROR-002
 
+FLUSHALL   ---> para borrar todo
 
 ***********************************************************************
 
@@ -165,6 +169,8 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
     - Half-Open: Después de un tiempo, deja pasar unas pocas peticiones para ver si el servicio ya se recuperó.
 
 * Transactional Outbox Pattern
+* El Scheduler es el motor que garantiza que la "consistencia eventual" se cumpla: si el mensaje está en la tabla, tarde o temprano llegará a Kafka.
+
 
 ***********************************************************************
 
