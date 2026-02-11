@@ -1,4 +1,4 @@
-package com.jchacon.banking.frauddetection.service;
+package com.jchacon.banking.frauddetection.service.impl;
 
 import com.jchacon.banking.frauddetection.config.CorrelationFilter;
 import com.jchacon.banking.frauddetection.event.TransactionEvent;
@@ -13,6 +13,8 @@ import com.jchacon.banking.frauddetection.model.enums.TransactionStatus;
 import com.jchacon.banking.frauddetection.producer.FraudEventProducer;
 import com.jchacon.banking.frauddetection.repository.CustomerLimitRepository;
 import com.jchacon.banking.frauddetection.repository.TransactionRepository;
+import com.jchacon.banking.frauddetection.service.FraudService;
+import com.jchacon.banking.frauddetection.service.IdempotencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -32,6 +34,7 @@ public class FraudServiceImpl implements FraudService {
     private final TransactionRepository transactionRepository;
     private final CustomerLimitRepository customerLimitRepository;
     private final FraudEventProducer eventProducer;
+    private final IdempotencyService idempotencyService;
 
     /**
      * Entry point for transaction processing.
@@ -39,21 +42,28 @@ public class FraudServiceImpl implements FraudService {
      */
     @Transactional // Ensures both database operations complete or fail together
     public Mono<ProcessTransactionResponseDTO> processTransaction(ProcessTransactionRequestDTO request) {
-
+        String txnId = request.getTransactionId();
         // Get the correlation ID from MDC (already populated by Micrometer Context Propagation)
         String activeCorrelationId = MDC.get(CorrelationFilter.CORRELATION_ID_KEY);
-
-        // Idempotency Check: First, look for the transactionId in our records
-        return transactionRepository.findByTransactionId(request.getTransactionId())
-                .map(existingEntity -> {
-                    log.warn("Idempotency Triggered: Transaction {} already processed. Returning cached result.",
-                            request.getTransactionId());
-                    return mapToResponseDTO(existingEntity);
-                })
-                /* If not found, proceed to process. Mono.defer is crucial here: it ensures executeProcessing() is only
-                 * called if the transaction does NOT exist in the database.
-                 */
+        // Try to get from Redis Cache (Full JSON)
+        return idempotencyService.getCachedResponse(txnId)
+                .doOnNext(res -> log.warn("Idempotency Triggered (Redis): Returning full cached response for {}", txnId))
+                // If NOT in Redis, check DB (Double check for safety)
+                .switchIfEmpty(Mono.defer(() -> fetchFromDbAndMap(txnId)))
+                // If NOT in DB, process normally
                 .switchIfEmpty(Mono.defer(() -> executeProcessing(request, activeCorrelationId)));
+    }
+
+    /**
+     * Helper method to fetch from DB and map to DTO to keep processTransaction clean.
+     */
+    private Mono<ProcessTransactionResponseDTO> fetchFromDbAndMap(String transactionId) {
+        // Idempotency Check: First, look for the transactionId in our records
+        return transactionRepository.findByTransactionId(transactionId)
+                .map(existingEntity -> {
+                    log.warn("Idempotency Triggered (DB): Transaction {} found in records.", transactionId);
+                    return mapToResponseDTO(existingEntity);
+                });
     }
 
     /**
@@ -76,15 +86,17 @@ public class FraudServiceImpl implements FraudService {
                         return handleApprovedTransaction(transaction, limit, projectedSpent);
                     }
                 })
-                // Sending event to Kafka before answer to the client
-                .flatMap(savedEntity ->
-                        eventProducer.sendTransactionEvent(mapToEvent(savedEntity))
-                                .timeout(Duration.ofSeconds(2)) // Kafka have only 2 seconds
-                                .onErrorResume(e -> {
-                                    log.error("Kafka failed, but transaction is saved. Error: {}", e.getMessage());
-                                    return Mono.empty(); // Ignoring the Kafka error to have no effect on the client's response
-                                })
-                                .thenReturn(mapToResponseDTO(savedEntity)))
+                // AFTER DB SAVE: Mark as processed in Redis AND send to Kafka
+                .flatMap(savedEntity -> {
+                    ProcessTransactionResponseDTO response = mapToResponseDTO(savedEntity);
+                    // Save in Redis AND publish to Kafka in parallel (Reactive style)
+                    return Mono.when(
+                            idempotencyService.markAsProcessed(savedEntity.getTransactionId(), response)
+                                    .doOnError(e -> log.error("Redis Cache Failed: {}", e.getMessage())),
+                            eventProducer.sendTransactionEvent(mapToEvent(savedEntity))
+                                    .doOnError(e -> log.error("Kafka Publish Failed: {}", e.getMessage()))
+                    ).thenReturn(response); // Ignoring the Kafka error to have no effect on the client's response
+                })
                 // Applying timeout to the entire flow or individual DB saves
                 .timeout(Duration.ofSeconds(5))
                 .switchIfEmpty(Mono.error(() -> {

@@ -8,6 +8,7 @@ import com.jchacon.banking.frauddetection.model.enums.OperationType;
 import com.jchacon.banking.frauddetection.producer.FraudEventProducer;
 import com.jchacon.banking.frauddetection.repository.CustomerLimitRepository;
 import com.jchacon.banking.frauddetection.repository.TransactionRepository;
+import com.jchacon.banking.frauddetection.service.impl.FraudServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,11 +37,16 @@ class FraudServiceImplTest {
     @Mock
     private FraudEventProducer eventProducer;
 
+    @Mock
+    private IdempotencyService idempotencyService;
+
     @InjectMocks
     private FraudServiceImpl fraudService;
 
     private ProcessTransactionRequestDTO request;
     private CustomerLimitEntity limit;
+
+    private static final String TXN_ID = "TXN-100";
 
     @BeforeEach
     void setUp() {
@@ -62,6 +68,8 @@ class FraudServiceImplTest {
     @DisplayName("Should APPROVE transaction and update limit")
     void shouldApproveTransaction() {
         // Arrange
+        when(idempotencyService.getCachedResponse(TXN_ID)).thenReturn(Mono.empty());
+        when(idempotencyService.markAsProcessed(anyString(), any())).thenReturn(Mono.empty());
         when(transactionRepository.findByTransactionId(anyString())).thenReturn(Mono.empty());
         when(customerLimitRepository.findById(anyString())).thenReturn(Mono.just(limit));
         when(customerLimitRepository.save(any())).thenReturn(Mono.just(limit));
@@ -83,6 +91,8 @@ class FraudServiceImplTest {
     @DisplayName("Should REJECT transaction when daily limit is exceeded")
     void shouldRejectWhenLimitExceeded() {
         // Arrange
+        when(idempotencyService.getCachedResponse(TXN_ID)).thenReturn(Mono.empty());
+        when(idempotencyService.markAsProcessed(anyString(), any())).thenReturn(Mono.empty());
         limit.setCurrentDailySpent(new BigDecimal("450.00"));
         when(transactionRepository.findByTransactionId(anyString())).thenReturn(Mono.empty());
         when(customerLimitRepository.findById(anyString())).thenReturn(Mono.just(limit));
@@ -105,6 +115,7 @@ class FraudServiceImplTest {
     @DisplayName("Idempotency: Should return cached result if transactionId exists")
     void shouldTriggerIdempotency() {
         // Arrange
+        when(idempotencyService.getCachedResponse(TXN_ID)).thenReturn(Mono.empty());
         TransactionEntity existingTx = TransactionEntity.builder()
                 .transactionId("TXN-100")
                 .status("APPROVED")
@@ -126,6 +137,7 @@ class FraudServiceImplTest {
     @DisplayName("Resilience: Should throw TechnicalException on Database Timeout")
     void shouldHandleTimeout() {
         // Arrange
+        when(idempotencyService.getCachedResponse(TXN_ID)).thenReturn(Mono.empty());
         when(transactionRepository.findByTransactionId(anyString())).thenReturn(Mono.empty());
         // Simulating DB delay of 10s (exceeding the 2s and 5s timeouts in service)
         when(customerLimitRepository.findById(anyString()))

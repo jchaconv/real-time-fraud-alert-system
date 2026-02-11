@@ -63,6 +63,10 @@ curl -X POST http://localhost:8081/api/v1/transactions \
 
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM customer_limits WHERE customer_id = 'CUST-001';"
 
+
+-----------------------------------------
+
+Configuración Kafka server:
        
 - rm -rf /tmp/kafka-logs /tmp/zookeeper /tmp/kraft-combined-logs
 - KAFKA_CLUSTER_ID="$(bin/kafka-storage.sh random-uuid)"
@@ -100,6 +104,28 @@ bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 \
 --topic fraud-detection-events-dlt \
 --from-beginning \
 --property print.headers=true
+
+
+-----------------------------------------
+
+Levantar Redis:
+
+docker run -d --name redis-banking -p 6379:6379 redis:latest
+
+# Entrar al CLI del contenedor
+docker exec -it redis-banking redis-cli
+# 1. Listar todas las llaves (Cuidado en producción, es lento)
+keys *
+# 2. Buscar solo las de idempotencia
+keys idempotency:txn:*
+# 3. Ver el valor de una transacción específica
+get idempotency:txn:TXN-ERROR-002
+# 4. Ver cuánto tiempo de vida le queda (en segundos)
+ttl idempotency:txn:TXN-ERROR-002
+
+
+
+
 
 
 
