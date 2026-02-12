@@ -188,7 +188,6 @@ curl http://localhost:8081/actuator/health
 
 poner en hosts: 127.0.0.1 auth-server para que se genere la firma con ese host y no con uno no autorizado como "localhost"
 
-
 test outbox:
 
 docker stop kafka-banking
@@ -197,6 +196,140 @@ docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "S
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM outbox_events;"
 
 docker start kafka-banking
+
+---------------------------------------------------------
+
+Kubernetes Config:
+
+---------------------
+Install kubectl:
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x kubectl
+sudo mv kubectl /usr/local/bin/
+
+# Verifica con:
+kubectl version --client
+---------------------
+Install Kind:
+
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.22.0/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
+---------------------
+Crear primer cluster:
+kind create cluster --name banking-cluster
+
+Validar acceso:
+kubectl cluster-info
+kubectl get nodes
+---------------------
+Crear namespace:
+kubectl create namespace banking-ns
+---------------------
+Crear un ConfigMap -> usar banking-config.yaml
+kubectl apply -f banking-config.yaml
+---------------------
+Para configurar Postgres
+Persistent Volume Claim -> postgres-pvc.yaml -> le dice a K8S "Resérvame 1GB de disco que sobreviva a reinicios".
+También se usará el archivo postgres-db.yaml
+
+# 1. Aplicar los archivos
+kubectl apply -f postgres-pvc.yaml
+kubectl apply -f postgres-db.yaml
+
+# 2. Verificar que el Pod esté corriendo
+kubectl get pods -n banking-ns
+
+# 3. Verificar el Service (Este es el que usará tu Java app)
+kubectl get svc -n banking-ns
+
+* Self-Healing:
+Si ejecuto esto:
+kubectl delete pod <nombre-del-pod-postgres> -n banking-ns
+K8s creará uno nuevo automáticamente
+
+---------------------
+
+Construir imágenes para subir a Docker Hub
+
+Configurar PAT en Docker Hub -> settings
+
+docker login -u jchaconv   -> luego pedirá el token
+docker logout
+
+# 1. Construir la imagen (asegúrate de estar en la carpeta del proyecto)
+docker build -t jchaconv/fraud-detection-service:latest .
+
+# 2. Subirla a la nube (Push)
+docker push jchaconv/fraud-detection-service:latest
+
+Ver en la parte de repositories de Docker Hub la imagen subida.
+---------------------
+Config de Redis:
+usar redis-k8s.yaml
+kubectl apply -f redis-k8s.yaml
+---------------------
+Crear fraud-service-deployment.yaml
+kubectl apply -f fraud-service-deployment.yaml
+Verificar el estado:
+# Ver si el pod está en Running o da error
+kubectl get pods -n banking-ns
+
+# Ver los logs de tu Spring Boot para confirmar conexión a DB y Redis
+kubectl logs -f deployment/fraud-detection-app -n banking-ns
+
+Como estoy usando wsl sale error para descargar de internet. Vamos a inyectar directamente
+desde mi máquina al cluster:
+# 1. Cargar Postgres
+docker pull postgres:15-alpine
+kind load docker-image postgres:15-alpine --name banking-cluster
+
+# 2. Cargar Redis
+docker pull redis:7-alpine
+kind load docker-image redis:7-alpine --name banking-cluster
+
+# 3. Cargar tu App
+kind load docker-image jchaconv/fraud-detection-service:latest --name banking-cluster
+
+esta línea debe estar en los archivos(solo los tres de abajo) yaml: imagePullPolicy: IfNotPresent
+
+Reiniciar despliegues:
+kubectl apply -f postgres-db.yaml
+kubectl apply -f redis-k8s.yaml
+kubectl apply -f fraud-service-deployment.yaml
+
+Verificar:
+kubectl get pods -n banking-ns
+
+Meter bien el init.sql para la base de datos:
+kubectl create configmap postgres-init-script --from-file=init.sql -n banking-ns
+
+actualizar el archivo de postgres (ya lo tengo actualizado)
+
+# 1. Borramos el despliegue actual
+kubectl delete deployment postgres-db -n banking-ns
+
+# 2. Borramos el PVC para limpiar los datos previos (OJO: Esto borra tus datos actuales)
+kubectl delete pvc postgres-pvc -n banking-ns
+
+# 3. Aplicamos todo de nuevo
+kubectl apply -f postgres-pvc.yaml
+kubectl apply -f postgres-db.yaml
+
+kubectl logs -f deployment/postgres-db -n banking-ns
+---------------------
+Probar App:
+Hacer tunnel primero
+kubectl port-forward svc/fraud-detection-entrypoint 8081:8081 -n banking-ns
+http://localhost:8081/actuator/health
+---------------------
+Config Kafka -> usar kafka-k8s.yaml
+docker pull apache/kafka:3.7.0
+kind load docker-image apache/kafka:3.7.0 --name banking-cluster
+kubectl apply -f kafka-k8s.yaml
+
+---------------------
+
 
 
 
@@ -231,9 +364,10 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
     - Open (Abierto): Hubo demasiados errores. El circuito se "rompe" y falla inmediatamente sin siquiera intentar llamar al servicio (protege los recursos).
     - Half-Open: Después de un tiempo, deja pasar unas pocas peticiones para ver si el servicio ya se recuperó.
 
-* Transactional Outbox Pattern
+* Transactional Outbox Pattern -> Outbox-First
 * El Scheduler es el motor que garantiza que la "consistencia eventual" se cumpla: si el mensaje está en la tabla, tarde o temprano llegará a Kafka.
 
+* Kind (Kubernetes in Docker): Es el más rápido para testing de CI/CD
 
 ***********************************************************************
 

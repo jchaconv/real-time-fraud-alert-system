@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: banking-config
+  namespace: banking-ns
+data:
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
+  DATABASE_URL: "jdbc:postgresql://postgres-service:5432/fraud_db"
+  REDIS_HOST: "redis-service"
