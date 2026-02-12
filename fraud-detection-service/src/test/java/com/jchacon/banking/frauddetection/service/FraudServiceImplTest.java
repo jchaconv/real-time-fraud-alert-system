@@ -1,5 +1,8 @@
 package com.jchacon.banking.frauddetection.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jchacon.banking.frauddetection.repository.OutboxRepository;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
@@ -9,7 +12,6 @@ import com.jchacon.banking.frauddetection.entity.TransactionEntity;
 import com.jchacon.banking.frauddetection.exception.TechnicalException;
 import com.jchacon.banking.frauddetection.model.ProcessTransactionRequestDTO;
 import com.jchacon.banking.frauddetection.model.enums.OperationType;
-import com.jchacon.banking.frauddetection.producer.FraudEventProducer;
 import com.jchacon.banking.frauddetection.repository.CustomerLimitRepository;
 import com.jchacon.banking.frauddetection.repository.TransactionRepository;
 import com.jchacon.banking.frauddetection.service.impl.FraudServiceImpl;
@@ -40,13 +42,16 @@ class FraudServiceImplTest {
     private CustomerLimitRepository customerLimitRepository;
 
     @Mock
-    private FraudEventProducer eventProducer;
-
-    @Mock
     private IdempotencyService idempotencyService;
 
     @Mock
     private Tracer tracer;
+
+    @Mock
+    private OutboxRepository outboxRepository; // New dependency added to service
+
+    @Mock
+    private ObjectMapper objectMapper; // New dependency added to service
 
     @InjectMocks
     private FraudServiceImpl fraudService;
@@ -84,7 +89,7 @@ class FraudServiceImplTest {
 
     @Test
     @DisplayName("Should APPROVE transaction and update limit")
-    void shouldApproveTransaction() {
+    void shouldApproveTransaction() throws JsonProcessingException {
         // Arrange
         when(idempotencyService.getCachedResponse(TXN_ID)).thenReturn(Mono.empty());
         when(idempotencyService.markAsProcessed(anyString(), any())).thenReturn(Mono.empty());
@@ -93,7 +98,10 @@ class FraudServiceImplTest {
         when(customerLimitRepository.save(any())).thenReturn(Mono.just(limit));
         when(transactionRepository.save(any())).thenAnswer(i -> Mono.just(i.getArgument(0)));
 
-        when(eventProducer.sendTransactionEvent(any())).thenReturn(Mono.empty());
+        // --- FIX: Mocking Outbox dependencies ---
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"mock\":\"payload\"}");
+        when(outboxRepository.save(any())).thenAnswer(i -> Mono.just(i.getArgument(0)));
+        // ----------------------------------------
 
         // Act & Assert
         StepVerifier.create(fraudService.processTransaction(request))
@@ -108,7 +116,7 @@ class FraudServiceImplTest {
 
     @Test
     @DisplayName("Should REJECT transaction when daily limit is exceeded")
-    void shouldRejectWhenLimitExceeded() {
+    void shouldRejectWhenLimitExceeded() throws JsonProcessingException {
         // Arrange
         when(idempotencyService.getCachedResponse(TXN_ID)).thenReturn(Mono.empty());
         when(idempotencyService.markAsProcessed(anyString(), any())).thenReturn(Mono.empty());
@@ -117,7 +125,10 @@ class FraudServiceImplTest {
         when(customerLimitRepository.findById(anyString())).thenReturn(Mono.just(limit));
         when(transactionRepository.save(any())).thenAnswer(i -> Mono.just(i.getArgument(0)));
 
-        when(eventProducer.sendTransactionEvent(any())).thenReturn(Mono.empty());
+        // --- FIX: Mocking Outbox dependencies ---
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"mock\":\"payload\"}");
+        when(outboxRepository.save(any())).thenAnswer(i -> Mono.just(i.getArgument(0)));
+        // ----------------------------------------
 
         // Act & Assert
         StepVerifier.create(fraudService.processTransaction(request))

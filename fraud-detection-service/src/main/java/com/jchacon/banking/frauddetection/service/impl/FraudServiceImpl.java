@@ -1,5 +1,9 @@
 package com.jchacon.banking.frauddetection.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jchacon.banking.frauddetection.entity.OutboxEventEntity;
+import com.jchacon.banking.frauddetection.model.enums.OutboxEventStatus;
+import com.jchacon.banking.frauddetection.repository.OutboxRepository;
 import io.micrometer.tracing.Tracer;
 
 import com.jchacon.banking.frauddetection.event.TransactionEvent;
@@ -34,9 +38,9 @@ public class FraudServiceImpl implements FraudService {
 
     private final TransactionRepository transactionRepository;
     private final CustomerLimitRepository customerLimitRepository;
-    private final FraudEventProducer eventProducer;
     private final IdempotencyService idempotencyService;
-
+    private final OutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
     private final Tracer tracer;
 
     /**
@@ -96,13 +100,13 @@ public class FraudServiceImpl implements FraudService {
                 // AFTER DB SAVE: Mark as processed in Redis AND send to Kafka
                 .flatMap(savedEntity -> {
                     ProcessTransactionResponseDTO response = mapToResponseDTO(savedEntity);
-                    // Save in Redis AND publish to Kafka in parallel (Reactive style)
-                    return Mono.when(
-                            idempotencyService.markAsProcessed(savedEntity.getTransactionId(), response)
-                                    .doOnError(e -> log.error("Redis Cache Failed: {}", e.getMessage())),
-                            eventProducer.sendTransactionEvent(mapToEvent(savedEntity))
-                                    .doOnError(e -> log.error("Kafka Publish Failed: {}", e.getMessage()))
-                    ).thenReturn(response); // Ignoring the Kafka error to have no effect on the client's response
+                    TransactionEvent event = mapToEvent(savedEntity);
+                    // TRANSACTIONAL ATOMICITY:
+                    // 1. Save to Outbox (Postgres - Same transaction)
+                    // 2. Mark in Redis (External - Occurs only if Outbox save succeeds)
+                    return saveToOutboxInternal(event) // This must be a method in your service or a specialized component
+                            .then(idempotencyService.markAsProcessed(savedEntity.getTransactionId(), response))
+                            .thenReturn(response);
                 })
                 // Applying timeout to the entire flow or individual DB saves
                 .timeout(Duration.ofSeconds(5))
@@ -115,6 +119,27 @@ public class FraudServiceImpl implements FraudService {
                     log.error("Technical error during transaction processing: {}", e.getMessage());
                     return Mono.error(new TechnicalException("Service temporarily unavailable due to System issues", e));
                 });
+    }
+
+    /**
+     * Internal helper to save to Outbox as part of the main transaction.
+     * Status is set to 'FAILED' (or 'PENDING') so the Scheduler picks it up immediately.
+     */
+    private Mono<Void> saveToOutboxInternal(TransactionEvent event) {
+        return Mono.fromCallable(() -> objectMapper.writeValueAsString(event))
+                .flatMap(payload -> {
+                    OutboxEventEntity outboxEvent = OutboxEventEntity.builder()
+                            .transactionId(event.getTransactionId())
+                            .payload(payload)
+                            .status(OutboxEventStatus.FAILED.name()) // The scheduler looks for 'FAILED'
+                            .retryCount(0)
+                            .createdAt(LocalDateTime.now())
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+
+                    return outboxRepository.save(outboxEvent);
+                })
+                .then();
     }
 
     /**

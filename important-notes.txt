@@ -12,6 +12,7 @@
 04-observability-context-propagation
 05-kafka-retries-backoff
 06-transactional-outbox-pattern
+07-docker-kubernetes
 
 
 ***********************************************************************
@@ -56,6 +57,8 @@ Para testear:
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT customer_id, daily_max_amount FROM customer_limits;"
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT count(*) FROM transactions;"
 docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM transactions;"
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM transactions WHERE customer_id = 'CUST-001';"
+
 
 Probar fraud-detection-service:
 
@@ -136,6 +139,66 @@ get idempotency:txn:TXN-ERROR-002
 ttl idempotency:txn:TXN-ERROR-002
 
 FLUSHALL   ---> para borrar todo
+
+***********************************************************************
+
+Para levantar todo el ecosistema:
+
+sudo mkdir fraud-alert-system
+sudo chown -R jchaconv:jchaconv /home/jchaconv/fraud-alert-system   ---> dar permisos sudo
+ls -ld fraud-alert-system    --> ejecutar desde aquí /home/jchaconv/ para validar permisos
+
+tener esta estructura:
+
+fraud-alert-system/
+├── auth-server/             (Carpeta del microservicio)
+├── fraud-detection-service/ (Carpeta del microservicio)
+├── notification-service/    (Carpeta del microservicio)
+├── scripts/                 <-- AQUÍ pones el script
+│   └── init.sql
+└── docker-compose.yaml      <-- El YAML en la raíz
+
+chmod 644 /home/jchaconv/fraud-alert-system/scripts/init.sql   ---> Permisos de ejecución: Asegúrate de que el archivo tenga permisos de lectura dentro de WSL
+chmod +x auth-server/mvnw
+chmod +x fraud-detection-service/mvnw
+chmod +x notification-service/mvnw
+
+docker-compose up --build -d     -----> cuando necesito compilar de nuevo las imágenes
+docker-compose ps   --> verificar estados
+
+
+Solo la primera vez: Recuerda que Postgres solo ejecuta los scripts en /docker-entrypoint-initdb.d/ la primera vez que se crea el volumen.
+Si haces cambios en el init.sql y quieres que se reflejen, debes borrar el contenedor y su volumen:
+
+docker-compose down   ----> para limpiar los containers
+docker-compose up -d     ----> cuando solo hay cambios en el docker-compose.yaml
+
+docker logs -f fraud-detection-service
+docker logs -f notification-service
+docker logs -f auth-server
+
+
+docker exec kafka-banking /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db
+SELECT * FROM transactions WHERE customer_id = 'CUST-001';
+
+docker exec -it redis-banking redis-cli
+
+curl http://localhost:8081/actuator/health
+
+poner en hosts: 127.0.0.1 auth-server para que se genere la firma con ese host y no con uno no autorizado como "localhost"
+
+
+test outbox:
+
+docker stop kafka-banking
+
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM transactions WHERE customer_id = 'CUST-001';"
+docker exec -it reactive-postgres-banking psql -U user_banking -d fraud_db -c "SELECT * FROM outbox_events;"
+
+docker start kafka-banking
+
+
 
 ***********************************************************************
 
