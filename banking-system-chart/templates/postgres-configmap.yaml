@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: {{ .Values.namespace }}
+data:
+  init.sql: |
+    -- =============================================================================
+    -- 1. TABLA DE LÍMITES (Perfilado de Cliente para Fraude)
+    -- =============================================================================
+    CREATE TABLE IF NOT EXISTS customer_limits (
+        customer_id VARCHAR(36) PRIMARY KEY,
+        daily_max_amount DECIMAL(18, 4) NOT NULL,
+        current_daily_spent DECIMAL(18, 4) DEFAULT 0,
+        last_reset TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Data de prueba: Diferentes escenarios de límites
+    INSERT INTO customer_limits (customer_id, daily_max_amount, current_daily_spent) VALUES
+    ('CUST-001', 5000.00, 1200.00),
+    ('CUST-002', 10000.00, 9500.00), -- Escenario: Al borde del límite
+    ('CUST-003', 2000.00, 0.00),     -- Escenario: Nuevo/Sin gasto
+    ('CUST-004', 500.00, 450.00),    -- Escenario: Límite muy bajo
+    ('CUST-005', 15000.00, 2000.00),
+    ('CUST-006', 3000.00, 2900.00),
+    ('CUST-007', 8000.00, 100.00),
+    ('CUST-008', 1200.00, 0.00),
+    ('CUST-009', 25000.00, 5000.00),
+    ('CUST-010', 100.00, 90.00)
+    ON CONFLICT (customer_id) DO NOTHING;
+
+    -- =============================================================================
+    -- 2. TABLA DE TRANSACCIONES (Core Ledger)
+    -- =============================================================================
+    CREATE TABLE IF NOT EXISTS transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        transaction_id VARCHAR(64) UNIQUE NOT NULL,
+        correlation_id VARCHAR(128),
+        account_id VARCHAR(36) NOT NULL,
+        customer_id VARCHAR(36) NOT NULL,
+        amount DECIMAL(18, 4) NOT NULL,
+        currency CHAR(3) NOT NULL DEFAULT 'PEN',
+        operation_type VARCHAR(30) NOT NULL,
+        merchant_id VARCHAR(50),
+        merchant_name VARCHAR(150),
+        mcc VARCHAR(4),
+        terminal_id VARCHAR(20),
+        ip_address VARCHAR(45),
+        channel VARCHAR(20) NOT NULL,
+        status VARCHAR(20) NOT NULL,
+        response_code VARCHAR(5),
+        description TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Data de prueba: Mix de canales y estados
+    INSERT INTO transactions (transaction_id, correlation_id, account_id, customer_id, amount, operation_type, merchant_name, mcc, channel, status, response_code) VALUES
+    ('TXN-2024-001', 'CORR-001', 'ACC-101', 'CUST-001', 500.00, 'DEBIT', 'Saga Falabella', '5311', 'POS', 'COMPLETED', '00'),
+    ('TXN-2024-002', 'CORR-002', 'ACC-102', 'CUST-002', 1200.00, 'TRANSFER', 'Interbank App', '4829', 'MOBILE_APP', 'COMPLETED', '00'),
+    ('TXN-2024-003', 'CORR-003', 'ACC-101', 'CUST-001', 3500.00, 'DEBIT', 'IKEA Online', '5712', 'WEB', 'PENDING', '00'),
+    ('TXN-2024-004', 'CORR-004', 'ACC-104', 'CUST-004', 100.00, 'CASH_OUT', 'Global Net ATM', '6011', 'ATM', 'FAILED', '51'),
+    ('TXN-2024-005', 'CORR-005', 'ACC-105', 'CUST-005', 2000.00, 'DEBIT', 'Travel Agency', '4722', 'WEB', 'COMPLETED', '00')
+    ON CONFLICT (transaction_id) DO NOTHING;
+
+    CREATE INDEX IF NOT EXISTS idx_transaction_customer ON transactions(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_transaction_created_at ON transactions(created_at);
+
+    -- =============================================================================
+    -- 3. TABLA OUTBOX (Mensajería Asíncrona Garantizada)
+    -- =============================================================================
+    CREATE TABLE IF NOT EXISTS outbox_events (
+        id SERIAL PRIMARY KEY,
+        transaction_id VARCHAR(50) NOT NULL,
+        payload TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'FAILED',
+        error_message TEXT,
+        retry_count INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );

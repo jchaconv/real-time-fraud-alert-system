@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fraud.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.fraud.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.fraud.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.fraud.name }}
+    spec:
+      containers:
+      - name: {{ .Values.fraud.name }}-container
+        image: {{ .Values.fraud.image }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: {{ .Values.fraud.containerPort }}
+        env:
+        - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+          value: "http://{{ .Values.auth.name }}{{ .Values.infrastructure.auth.issuerSuffix }}"
+        - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+          value: "http://auth-service{{ .Values.infrastructure.auth.issuerSuffix }}{{ .Values.infrastructure.auth.jwksPath }}"
+        - name: SPRING_R2DBC_URL
+          value: "r2dbc:postgresql://{{ .Values.infrastructure.postgres.host }}:5432/{{ .Values.infrastructure.postgres.db }}"
+        - name: SPRING_R2DBC_USERNAME
+          value: {{ .Values.infrastructure.postgres.user | quote }}
+        - name: SPRING_R2DBC_PASSWORD
+          value: {{ .Values.infrastructure.postgres.pass | quote }}
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://{{ .Values.infrastructure.postgres.host }}:5432/{{ .Values.infrastructure.postgres.db }}"
+        - name: SPRING_DATASOURCE_USERNAME
+          value: {{ .Values.infrastructure.postgres.user | quote }}
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: {{ .Values.infrastructure.postgres.pass | quote }}
+        - name: SPRING_DATA_REDIS_HOST
+          value: {{ .Values.redis.serviceName | quote }}
+        - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+          value: "{{ .Values.kafka.serviceName }}:{{ .Values.kafka.port }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.fraud.name }}-entrypoint
+  namespace: {{ .Values.namespace }}
+spec:
+  type: NodePort
+  selector:
+    app: {{ .Values.fraud.name }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.fraud.containerPort }}
+      targetPort: {{ .Values.fraud.containerPort }}
+      nodePort: {{ .Values.fraud.nodePort }}

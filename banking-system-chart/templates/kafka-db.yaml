@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kafka.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: {{ .Values.kafka.image }}
+        ports:
+        - containerPort: {{ .Values.kafka.port }}
+        env:
+        - name: KAFKA_NODE_ID
+          value: {{ .Values.kafka.nodeId | quote }}
+        - name: KAFKA_PROCESS_ROLES
+          value: "broker,controller"
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          value: "1@localhost:{{ .Values.kafka.controllerPort }}"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://:{{ .Values.kafka.port }},CONTROLLER://:{{ .Values.kafka.controllerPort }}"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://{{ .Values.kafka.serviceName }}:{{ .Values.kafka.port }}"
+        - name: KAFKA_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.kafka.serviceName }}
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    app: kafka
+  ports:
+    - protocol: TCP
+      port: {{ .Values.kafka.port }}
+      targetPort: {{ .Values.kafka.port }}

@@ -1,0 +1,963 @@
+{
+  "info": {
+    "_postman_id": "2b84e51a-d3b1-4bf1-8d2e-d8d18e93f0b3",
+    "name": "real-time-fraud-alert-system",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "50454206",
+    "_collection_link": "https://go.postman.co/collection/50454206-2b84e51a-d3b1-4bf1-8d2e-d8d18e93f0b3?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "localhost",
+      "item": [
+        {
+          "name": "get-access-token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();\r",
+                  "\r",
+                  "if (response.access_token) {\r",
+                  "    pm.environment.set(\"access_token\", response.access_token);\r",
+                  "    console.log(\"Access token guardado correctamente\");\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "password",
+                  "value": "banking-secret",
+                  "type": "string"
+                },
+                {
+                  "key": "username",
+                  "value": "banking-client",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text",
+                  "uuid": "1a237b55-db7c-4988-8bd0-f45ff94db852"
+                },
+                {
+                  "key": "scope",
+                  "value": "transaction:write",
+                  "type": "text",
+                  "uuid": "1ad7c72f-6e03-4da0-851a-c734b6e760b9"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:9000/oauth2/token",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "9000",
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "create-transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "",
+                "value": "",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-001\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-010\",\r\n    \"amount\": 54.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"MASS\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:8081/api/v1/fraud/process",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8081",
+              "path": [
+                "api",
+                "v1",
+                "fraud",
+                "process"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "1-Credit Ok",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-CREDIT-001\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 300.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"CREDIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"Netflix\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "X-Correlation-ID",
+                  "value": "1fac3309-8c8a-4008-aa05-c4381b6d41ed"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "210"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"f4be4848-7fac-4b75-83cd-f460ca5c82b0\",\n    \"transactionId\": \"TXN-CREDIT-001\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-09T18:26:09.7016432\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "docker-env",
+      "item": [
+        {
+          "name": "get-access-token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();\r",
+                  "\r",
+                  "if (response.access_token) {\r",
+                  "    pm.environment.set(\"access_token\", response.access_token);\r",
+                  "    console.log(\"Access token guardado correctamente\");\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "password",
+                  "value": "banking-secret",
+                  "type": "string"
+                },
+                {
+                  "key": "username",
+                  "value": "banking-client",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text",
+                  "uuid": "1a237b55-db7c-4988-8bd0-f45ff94db852"
+                },
+                {
+                  "key": "scope",
+                  "value": "transaction:write",
+                  "type": "text",
+                  "uuid": "1ad7c72f-6e03-4da0-851a-c734b6e760b9"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://auth-server:9000/oauth2/token",
+              "protocol": "http",
+              "host": [
+                "auth-server"
+              ],
+              "port": "9000",
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "process-transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "",
+                "value": "",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-005\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 88.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"PAPOS\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:8081/api/v1/fraud/process",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8081",
+              "path": [
+                "api",
+                "v1",
+                "fraud",
+                "process"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "1-debit-ok",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-001\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 21.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"CINEPLANET\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "211"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, no-store, max-age=0, must-revalidate"
+                },
+                {
+                  "key": "Pragma",
+                  "value": "no-cache"
+                },
+                {
+                  "key": "Expires",
+                  "value": "0"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "X-Trace-ID",
+                  "value": "698d12e6368036846d6df2b479b04aef"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"57e730a1-53d6-41d4-8c89-90298abdb6ee\",\n    \"transactionId\": \"TXN-DEBIT-001\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-11T23:38:15.335103326\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "k8s-helm",
+      "item": [
+        {
+          "name": "health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8081/actuator/health",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8081",
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "get-access-token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const response = pm.response.json();\r",
+                  "\r",
+                  "if (response.access_token) {\r",
+                  "    pm.environment.set(\"access_token\", response.access_token);\r",
+                  "    console.log(\"Access token guardado correctamente\");\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "password",
+                  "value": "banking-secret",
+                  "type": "string"
+                },
+                {
+                  "key": "username",
+                  "value": "banking-client",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text",
+                  "uuid": "1a237b55-db7c-4988-8bd0-f45ff94db852"
+                },
+                {
+                  "key": "scope",
+                  "value": "transaction:write",
+                  "type": "text",
+                  "uuid": "1ad7c72f-6e03-4da0-851a-c734b6e760b9"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://auth-server:9000/oauth2/token",
+              "protocol": "http",
+              "host": [
+                "auth-server"
+              ],
+              "port": "9000",
+              "path": [
+                "oauth2",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "process-transaction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "",
+                "value": "",
+                "type": "text",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-006\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 45.90,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"Pizza Hut\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:8081/api/v1/fraud/process",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8081",
+              "path": [
+                "api",
+                "v1",
+                "fraud",
+                "process"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "TXN-DEBIT-001",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-001\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 22.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"Tienda MASS\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "210"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, no-store, max-age=0, must-revalidate"
+                },
+                {
+                  "key": "Pragma",
+                  "value": "no-cache"
+                },
+                {
+                  "key": "Expires",
+                  "value": "0"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "X-Trace-ID",
+                  "value": "698e9bfa6397151ed20c0025af2e3a7b"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"4f86e42f-172e-44ae-9cf2-1e9c9783eb85\",\n    \"transactionId\": \"TXN-DEBIT-001\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-13T03:35:23.99408727\"\n}"
+            },
+            {
+              "name": "TXN-DEBIT-002",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-002\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 51.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"3A\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "210"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, no-store, max-age=0, must-revalidate"
+                },
+                {
+                  "key": "Pragma",
+                  "value": "no-cache"
+                },
+                {
+                  "key": "Expires",
+                  "value": "0"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "X-Trace-ID",
+                  "value": "698e9c12c035a2a7886fe0ed8e2d7d98"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"811cbc39-14c4-49c4-959f-cc169162dff5\",\n    \"transactionId\": \"TXN-DEBIT-002\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-13T03:35:46.98656261\"\n}"
+            },
+            {
+              "name": "TXN-DEBIT-003",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-003\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 28.00,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"CINEPLANET\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "211"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, no-store, max-age=0, must-revalidate"
+                },
+                {
+                  "key": "Pragma",
+                  "value": "no-cache"
+                },
+                {
+                  "key": "Expires",
+                  "value": "0"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "X-Trace-ID",
+                  "value": "698e9c31ab912b4e53e4bdb6981b356b"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"2dfe4313-41ae-4150-b19e-72954404a3a7\",\n    \"transactionId\": \"TXN-DEBIT-003\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-13T03:36:17.683512943\"\n}"
+            },
+            {
+              "name": "TXN-DEBIT-004",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-004\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 189.50,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"Sodimac\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "211"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, no-store, max-age=0, must-revalidate"
+                },
+                {
+                  "key": "Pragma",
+                  "value": "no-cache"
+                },
+                {
+                  "key": "Expires",
+                  "value": "0"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "X-Trace-ID",
+                  "value": "698e9c552f786df7e2c281ae003ab05b"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"757b6314-652a-43ca-8ae5-83307ff0e098\",\n    \"transactionId\": \"TXN-DEBIT-004\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-13T03:36:53.891375065\"\n}"
+            },
+            {
+              "name": "TXN-DEBIT-005",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "",
+                    "value": "",
+                    "type": "text",
+                    "disabled": true
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n    \"transactionId\": \"TXN-DEBIT-005\",\r\n    \"accountId\": \"ACC-777\",\r\n    \"customerId\": \"CUST-001\",\r\n    \"amount\": 12.99,\r\n    \"currency\": \"PEN\",\r\n    \"operationType\": \"DEBIT\",\r\n    \"merchantId\": \"MER-999\",\r\n    \"merchantName\": \"Dollar City\",\r\n    \"mcc\": \"5814\",\r\n    \"channel\": \"WEB\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:8081/api/v1/fraud/process",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "8081",
+                  "path": [
+                    "api",
+                    "v1",
+                    "fraud",
+                    "process"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "211"
+                },
+                {
+                  "key": "Cache-Control",
+                  "value": "no-cache, no-store, max-age=0, must-revalidate"
+                },
+                {
+                  "key": "Pragma",
+                  "value": "no-cache"
+                },
+                {
+                  "key": "Expires",
+                  "value": "0"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "DENY"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "X-Trace-ID",
+                  "value": "698e9d62e93a62971982029258d06ff5"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"id\": \"e55ad54f-29e1-4df8-9f86-64376bb94ce3\",\n    \"transactionId\": \"TXN-DEBIT-005\",\n    \"status\": \"APPROVED\",\n    \"responseCode\": \"00\",\n    \"description\": \"Transaction verified successfully\",\n    \"createdAt\": \"2026-02-13T03:41:22.532049645\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

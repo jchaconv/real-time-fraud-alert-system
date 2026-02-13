@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.auth.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.auth.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.auth.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.auth.name }}
+    spec:
+      containers:
+      - name: {{ .Values.auth.name }}-container
+        image: {{ .Values.auth.image }}
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: {{ .Values.auth.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: {{ .Values.namespace }}
+spec:
+  type: NodePort
+  selector:
+    app: {{ .Values.auth.name }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.auth.port }}
+      targetPort: {{ .Values.auth.port }}
+      nodePort: {{ .Values.auth.nodePort }}

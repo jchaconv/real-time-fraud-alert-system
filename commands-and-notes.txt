@@ -13,6 +13,7 @@
 05-kafka-retries-backoff
 06-transactional-outbox-pattern
 07-docker-kubernetes
+08-helm-infrastructure
 
 
 ***********************************************************************
@@ -403,9 +404,99 @@ kubectl get pods -n banking-ns
 
 kubectl scale deployment kafka-db --replicas=1 -n banking-ns
 
-
+Pruebas hasta aquí ok, happy path y error con Kafka caído.
 
 ***********************************************************************
+
+HELM:
+
+* Install helm:
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    helm version
+
+* Activar autocompletado:
+    echo "source <(helm completion bash)" >> ~/.bashrc
+    source ~/.bashrc
+
+* Crear esta estructura de carpetas:
+
+    banking-system-chart/
+    ├── Chart.yaml
+    ├── values.yaml
+    └── templates/
+        └── fraud-service.yaml
+
+* Dry Run - sirve para DEBUG (simula el despliegue sin aplicar nada, para ver qué YAML generaría):
+    helm install banking-app ./banking-system-chart --dry-run --debug
+
+* Validar chart:
+    helm lint ./banking-system-chart
+
+* Crear el cluster de K8s:
+    kind create cluster --name banking-cluster
+    kubectl create namespace banking-ns
+
+* Instalar:
+    helm install banking-app ./banking-system-chart -n banking-ns
+
+    Si se requiere borrar lo instalado:
+    helm uninstall banking-app -n default
+    kubectl delete all --all -n banking-ns
+
+* Error de red:
+    kind load docker-image jchaconv/fraud-detection-service:latest --name banking-cluster
+    kind load docker-image jchaconv/auth-server:latest --name banking-cluster
+    kind load docker-image jchaconv/notification-service:latest --name banking-cluster    
+    kind load docker-image apache/kafka:3.7.0 --name banking-cluster
+    kind load docker-image postgres:15-alpine --name banking-cluster
+    kind load docker-image redis:7-alpine --name banking-cluster
+
+* Validar recursos:
+    kubectl get all -n banking-ns
+
+* Post-instalación:
+    kubectl get pods -n banking-ns -w
+    helm list -n banking-ns
+    kubectl logs deployment/postgres-db -n banking-ns
+
+* Hacer tunnel al service:
+    kubectl port-forward svc/fraud-detection-app-entrypoint 8081:8081 -n banking-ns
+    kubectl port-forward svc/auth-service 9000:9000 -n banking-ns
+
+* Ejecutar SQL y ver logs:    
+    - postgresql:
+        kubectl exec -it deployment/postgres-db -n banking-ns -- psql -U jchacon -d fraud_db
+            \dt
+            SELECT * FROM customer_limits;
+            SELECT * FROM outbox_events;
+            \q
+
+    - redis:
+        kubectl exec -it deployment/redis-db -n banking-ns -- redis-cli
+
+    - fraud-service
+        kubectl logs -f deployment/fraud-detection-app -n banking-ns
+    
+    - notification-service
+        kubectl logs -f deployment/notification-service -n banking-ns
+
+    - Si se reinició el pod y se quiere ver error anterior:
+        kubectl logs deployment/fraud-detection-app -n banking-ns --previous
+
+* Probar happy path:ok, para probar con Kafka caído:ok
+
+    kubectl scale deployment kafka-db --replicas=0 -n banking-ns
+    kubectl get pods -n banking-ns
+    kubectl scale deployment kafka-db --replicas=1 -n banking-ns
+
+* Para borrar solo la aplicación manteniendo el cluster y la infraestructura base
+    helm uninstall banking-app -n banking-ns
+
+* Para borrar todo el cluster de Kind de raíz
+    kind delete cluster --name banking-cluster
+
+***********************************************************************
+
 
 Datos nuevos e importantes:
 
@@ -439,7 +530,7 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
 * Transactional Outbox Pattern -> Outbox-First
 * El Scheduler es el motor que garantiza que la "consistencia eventual" se cumpla: si el mensaje está en la tabla, tarde o temprano llegará a Kafka.
 
-* Kind (Kubernetes in Docker): Es el más rápido para testing de CI/CD
+* Kind (Kubernetes in Docker): es una herramienta que crea clusters de Kubernetes usando contenedores de Docker como "nodos". Es lo que está permitiendo que tu cluster "banking-ns" viva dentro de tu máquina. Es ideal para desarrollo porque es ligero y se destruye/crea rápido.
 
 * Kubernetes:
     - Un Pod es la unidad mínima. Dentro del pod van los containers, normalmente va solo uno. El Pod le da una IP.
@@ -483,6 +574,25 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
         - Borrar y crear cluster:
             - kind delete cluster --name banking-cluster
             - kind create cluster --name banking-cluster
+
+* ¿Qué es Helm y para qué sirve? Helm es el Package Manager de Kubernetes (el "Maven" o "NPM" de K8s).
+    - Templatización: En lugar de tener valores fijos (como replicas: 1), usas variables (como replicas: {{ .Values.replicaCount }}).
+    - Governance: Permite empaquetar todo tu sistema (Fraud + Auth + DBs) en una sola unidad llamada Chart.
+    - Versioning: Si haces un despliegue y falla, puedes hacer un helm rollback y el sistema vuelve exactamente al estado anterior en segundos.
+
+* YAMLs estáticos en un Banking-System Chart. Estructura:
+    banking-chart/
+        Chart.yaml          # Metadatos del proyecto
+        values.yaml         # Aquí defines las variables (IPs, puertos, réplicas)
+        templates/          # Tus YAMLs actuales pero con variables
+            fraud-deployment.yaml
+            auth-deployment.yaml
+            services.yaml
+
+* Despliegue atómico: En lugar de hacer kubectl apply a 5 archivos, harás:
+helm upgrade --install banking-system ./banking-chart
+
+
 
 
 ***********************************************************************

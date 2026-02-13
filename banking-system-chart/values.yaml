@@ -1,0 +1,51 @@
+namespace: banking-ns
+
+# Aplicaciones
+auth:
+  name: auth-server
+  replicaCount: 1
+  image: jchaconv/auth-server:latest
+  port: 9000
+  nodePort: 30900
+
+fraud:
+  name: fraud-detection-app
+  replicaCount: 1
+  image: jchaconv/fraud-detection-service:latest
+  containerPort: 8081
+  nodePort: 30081
+
+notification:
+  name: notification-service
+  replicaCount: 1
+  image: jchaconv/notification-service:latest
+  port: 8082
+  groupId: "notification-group"
+
+# Infraestructura (Raíz)
+kafka:
+  name: kafka-db
+  serviceName: kafka-service
+  image: apache/kafka:3.7.0
+  port: 9092
+  controllerPort: 9093
+  nodeId: "1"
+
+redis:
+  name: redis-db
+  serviceName: redis-service
+  image: redis:7-alpine
+  port: 6379
+
+infrastructure:
+  postgres:
+    name: postgres-db
+    host: postgres-service
+    db: fraud_db
+    user: jchacon
+    pass: banking123
+    storage: 1Gi
+    image: postgres:15-alpine
+  auth:
+    issuerSuffix: ":9000"
+    jwksPath: "/oauth2/jwks"
