@@ -327,9 +327,81 @@ Config Kafka -> usar kafka-k8s.yaml
 docker pull apache/kafka:3.7.0
 kind load docker-image apache/kafka:3.7.0 --name banking-cluster
 kubectl apply -f kafka-k8s.yaml
+kubectl logs -f deployment/kafka-db -n banking-ns
+---------------------
+Auth-Server:
+# Construir la imagen
+docker build -t jchaconv/auth-server:latest .
+
+# Cargarla a Kind para evitar el error de descarga en WSL
+kind load docker-image jchaconv/auth-server:latest --name banking-cluster
+
+kubectl apply -f auth-server-k8s.yaml
+
+Tunnel para Postman:
+Para usar exactamente la misma URL localhost:9000 desde Windows:
+kubectl port-forward svc/auth-service 9000:9000 -n banking-ns
+
+kubectl logs -f deployment/auth-server -n banking-ns
+
+---------------------
+notification-service:
+
+# 1. Construir la imagen
+docker build -t jchaconv/notification-service:latest .
+
+# 2. Inyectarla a Kind
+kind load docker-image jchaconv/notification-service:latest --name banking-cluster
+
+kubectl apply -f notification-service-k8s.yaml
 
 ---------------------
 
+Probar:
+kubectl logs -f deployment/fraud-detection-app -n banking-ns
+kubectl logs -f deployment/notification-service -n banking-ns
+
+# Entrar directo al prompt de SQL
+kubectl exec -it postgres-db-5b9f955d7-czvjd -n banking-ns -- psql -U jchacon -d fraud_db
+\dt
+SELECT * FROM customer_limits;
+SELECT * FROM outbox_events;
+SELECT * FROM transactions;
+\q
+
+# Entrar directo al cliente de Redis
+kubectl exec -it redis-db-7bf66994d7-cx4pf -n banking-ns -- redis-cli
+
+KEYS *
+GET <key_name>
+FLUSHALL
+exit
+
+
+Si quiero usar DBeaver, necesito tunnel:
+kubectl port-forward svc/postgres-service 5432:5432 -n banking-ns
+
+
+Validar si el pod puede ver a otro:
+kubectl exec -it fraud-detection-app-6d7d5f6758-mrghd -n banking-ns -- curl -v http://auth-service:9000/.well-known/openid-configuration
+
+
+Si se hace un nuevo deploy, para asegurar que tome las nuevas variables del archivo .yaml:
+kubectl rollout restart deployment/fraud-detection-app -n banking-ns
+
+
+# Ejecuta este comando para activar logs detallados de seguridad
+kubectl set env deployment/fraud-detection-app \
+  logging.level.org.springframework.security=DEBUG \
+  logging.level.org.springframework.security.oauth2=DEBUG \
+  -n banking-ns
+
+
+# Para probar con Kafka caído:
+kubectl scale deployment kafka-db --replicas=0 -n banking-ns
+kubectl get pods -n banking-ns
+
+kubectl scale deployment kafka-db --replicas=1 -n banking-ns
 
 
 
@@ -368,6 +440,50 @@ RxJava: Librería de Tipos, Flujos de datos (Observable)
 * El Scheduler es el motor que garantiza que la "consistencia eventual" se cumpla: si el mensaje está en la tabla, tarde o temprano llegará a Kafka.
 
 * Kind (Kubernetes in Docker): Es el más rápido para testing de CI/CD
+
+* Kubernetes:
+    - Un Pod es la unidad mínima. Dentro del pod van los containers, normalmente va solo uno. El Pod le da una IP.
+    - Deployment, "estado deseado", "quiero siempre 3 réplicas de ese pod corriendo". Funciona como autoscaling de AWS.
+    - Services, "load balancer interno" es una ip estática y nombre DNS parar apuntar a los PODs. Balancea la carga.
+    - ConfigMap / Secret, es como environment vars, para configurar el application.properties sin recompilar.
+    
+    - Flujo de trabajo:
+        - kubectl apply -f deployment.yaml   ---> k8s lee esto y hace que la realidad se vea así. Aquí se define la imagen docker a usar.
+        - kubectl get pods   ---> veo el estado de mis containers.
+        - kubectl logs <pod-name>
+        - kubectl exec -it <pod-name> -- bash   ----> es como docker exec, para ver archivos o conectividad
+
+    - Comandos para ver recursos básicos:
+        - kubectl get ns
+        - kubectl get pods -n banking-ns
+        - kubectl get svc -n banking-ns
+        - kubectl get deploy -n banking-ns
+        - kubectl get cm -n banking-ns
+        - kubectl get pvc -n banking-ns
+        - kubectl get all -n banking-ns   ---> ver todo
+        
+        - Cuando hay problemas de conexión:
+            - kubectl describe pod <nombre-del-pod> -n banking-ns
+            - kubectl describe svc auth-service -n banking-ns
+
+        - kubectl get pods --show-labels -n banking-ns  ---> validar services apuntando a pods correctos
+
+        - kubectl get pods -n banking-ns -w  ---> monitorear en tiempo real
+
+        - Para borrar
+            - kubectl delete deployment auth-server -n banking-ns
+            - kubectl delete service auth-service -n banking-ns
+
+        - Borra todos los despliegues y servicios en el namespace
+            - kubectl delete deployments,services --all -n banking-ns
+
+        - Borrado total:
+            - kubectl delete namespace banking-ns
+
+        - Borrar y crear cluster:
+            - kind delete cluster --name banking-cluster
+            - kind create cluster --name banking-cluster
+
 
 ***********************************************************************
 

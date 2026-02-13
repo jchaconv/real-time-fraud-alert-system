@@ -20,23 +20,33 @@ spec:
         ports:
         - containerPort: 8081
         env:
-        # IMPORTANTE: Para R2DBC se suele usar SPRING_R2DBC_URL
+        - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+          value: "http://auth-server:9000"
+        
+        # Pero para descargar las llaves (JWKS), usamos el Service de K8s que sí resuelve
+        - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+          value: "http://auth-service:9000/oauth2/jwks"
+        
+        # R2DBC
         - name: SPRING_R2DBC_URL
           value: "r2dbc:postgresql://postgres-service:5432/fraud_db"
         - name: SPRING_R2DBC_USERNAME
           value: "jchacon"
         - name: SPRING_R2DBC_PASSWORD
           value: "banking123"
-        # Mantén estas por si acaso tu app usa JDBC para alguna validación
+        
+        # Postgres
         - name: SPRING_DATASOURCE_URL
           value: "jdbc:postgresql://postgres-service:5432/fraud_db"
         - name: SPRING_DATASOURCE_USERNAME
           value: "jchacon"
         - name: SPRING_DATASOURCE_PASSWORD
           value: "banking123"
+        
         # Redis
         - name: SPRING_DATA_REDIS_HOST
           value: "redis-service"
+        
         # Kafka
         - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
           value: "kafka-service:9092"
