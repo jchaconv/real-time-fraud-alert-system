@@ -1,0 +1,202 @@
+Análisis Técnico del fraud-detection-service
+1. Stack Tecnológico (Basado en el pom.xml)
+Este componente es el más avanzado de tu arquitectura hasta ahora:
+
+Core: Spring Boot 3.5.10 y Java 21.
+
+Paradigma Reactivo: Usa Project Reactor (WebFlux, R2DBC, Redis Reactive y Reactor Kafka). Esto permite procesar miles de transacciones por segundo sin bloquear hilos.
+
+Persistencia: SQL No-bloqueante con R2DBC para PostgreSQL.
+
+Mensajería: Reactor Kafka, que permite enviar y recibir eventos de forma asíncrona.
+
+Observabilidad: Implementas Micrometer Tracing y Brave, lo que es estándar de oro en banca para rastrear una transacción entre servicios.
+
+
+
+2. Explicación de las Clases de Configuración
+Aquí es donde aplicas patrones de arquitectura avanzada:
+
+OutboxScheduler.java (Patrón Transactional Outbox):
+Esta es una de las piezas más importantes. Implementa el patrón Transactional Outbox.
+
+¿Qué hace? Busca eventos en la tabla outbox que fallaron al enviarse a Kafka.
+
+¿Por qué es vital? Garantiza la "consistencia eventual". Si Kafka cae, el servicio guarda el evento en la DB y este Scheduler lo reintenta cada 5 segundos hasta lograrlo (o hasta 10 intentos). Esto evita pérdida de notificaciones de fraude.
+
+SecurityConfig.java (Resource Server):
+Configura el servicio como un OAuth2 Resource Server.
+
+¿Qué hace? Valida los tokens JWT que emite tu auth-server.
+
+Autorización fina: Exige el scope transaction:write para poder procesar transacciones en la ruta /api/v1/transactions/**.
+
+CorrelationFilter.java & ObservationConfig.java:
+Manejan la trazabilidad.
+
+¿Qué hacen? Inyectan un X-Trace-ID en las respuestas y aseguran que este ID se mantenga vivo a través de todo el flujo reactivo (que suele ser difícil de rastrear porque salta entre hilos).
+
+SecurityExceptionHandler.java:
+Personaliza las respuestas de error.
+
+¿Qué hace? Si alguien envía un token inválido (401) o no tiene permisos (403), devuelve un JSON estandarizado con el código de error de negocio "99", siguiendo estándares bancarios.
+
+R2dbcConfig.java & OpenApiConfig.java:
+Activan la auditoría automática (fechas de creación/modificación) y documentan la API con Swagger/OpenAPI.
+
+
+3. Recopilación de Features y Patrones (Para tu README)
+Funcionalidades Identificadas:
+
+Evaluación de transacciones en tiempo real.
+
+Control de límites diarios de clientes.
+
+Reintento automático de eventos fallidos (Resiliencia).
+
+Documentación interactiva de API.
+
+Patrones Aplicados:
+
+Reactive Programming: Uso de flujos no bloqueantes (Flux/Mono).
+
+Transactional Outbox: Para fiabilidad en el envío de mensajes.
+
+Externalized Configuration: Uso de values.yaml para inyectar hosts de infraestructura.
+
+Distributed Tracing: Propagación de contexto de observabilidad.
+
+
+Análisis Técnico: Capa de Dominio y Exposición
+1. Controlador Reactivo (TransactionController.java)
+Tecnología: Spring WebFlux.
+
+Funcionalidad: Expone el endpoint crítico /api/v1/fraud/process.
+
+Detalle Senior: Es un diseño orientado a la intención. No usas un /create, sino un /process, lo que indica que el controlador inicia un proceso de evaluación, no solo una inserción en base de datos.
+
+Documentación: Uso extensivo de Swagger/OpenAPI, lo cual es vital en banca para que los equipos de canales (Apps, Web) sepan exactamente qué enviar y qué esperar (códigos 200 vs 400).
+
+2. Modelo de Datos y Persistencia (Entities)
+Aquí aplicas una separación de responsabilidades muy clara:
+
+TransactionEntity: Es tu "Ledger" o libro mayor. Registra cada detalle técnico de la operación (IP, Merchant, MCC, moneda). Implementa Persistable, lo que indica que estás optimizando el rendimiento de R2DBC para evitar que Spring Data haga un SELECT antes de cada INSERT.
+
+CustomerLimitEntity: Aquí reside la regla de negocio. Controla el saldo diario gastado (current_daily_spent) frente al máximo permitido (daily_max_amount).
+
+OutboxEventEntity: El soporte físico para el patrón Transactional Outbox. Almacena el evento en formato JSON (columna payload) para asegurar que, si Kafka falla, el evento no se pierda.
+
+3. Estrategia de Manejo de Errores
+Este es uno de los puntos más robustos de tu código:
+
+GlobalExceptionHandler: Centraliza y estandariza las respuestas.
+
+Diferenciación Técnica vs. Negocio: * Usa BusinessException para casos como "Límite excedido" o "Cuenta bloqueada" (devuelve errores controlados).
+
+Usa TechnicalException para fallos de infraestructura (DB caída, Kafka timeout).
+
+Estándar Bancario: El uso de un responseCode fijo (como el "99" que vi en tus archivos anteriores) es una práctica común en sistemas como ISO-8583 para indicar errores generales del sistema.
+
+4. Eventos (TransactionEvent)
+Es el Contrato de Integración. Define qué información viajará hacia el notification-service. Incluye el correlationId, asegurando que la trazabilidad (Tracing) no se rompa al saltar de un microservicio a otro a través de Kafka.
+
+
+
+Vamos a desglosar el fraud-detection-service por partes, analizando cómo orquestas todas estas piezas.
+
+1. El "Cerebro": Análisis de FraudServiceImpl
+Esta clase es el Orquestador Reactivo. Su función no es solo guardar datos, sino garantizar que la transacción sea válida, única y que el resto del sistema se entere de lo que pasó.
+
+Flujo Interno de una Transacción:
+
+Verificación de Idempotencia: Antes de tocar la base de datos, consulta a Redis (vía IdempotencyService) si esa transactionId ya fue procesada. Si existe, devuelve la respuesta cacheada. Esto evita que un reintento de la red cobre dos veces al cliente.
+
+Validación de Límites: Consulta en PostgreSQL el límite diario del cliente (CustomerLimitEntity). Si el monto actual + lo gastado hoy supera el máximo, lanza una BusinessException con código REJECTED_LIMIT.
+
+Persistencia Atómica: Guarda la transacción en la tabla transactions y actualiza el acumulado en customer_limits. Al ser reactivo (R2DBC), esto no bloquea los hilos del servidor.
+
+Emisión de Eventos (Reliable Messaging): Intenta enviar el resultado a Kafka. Si Kafka está caído o lento, el catch captura el error y guarda el evento en la tabla outbox para que el Scheduler que vimos antes lo reintente luego.
+
+2. Uso de Tecnologías (El Stack de Alto Rendimiento)
+Java 21 + Virtual Threads (implícito): Aprovechas la última versión de Java para un manejo eficiente de recursos.
+
+Project Reactor (Mono/Flux): Todo el servicio es no-bloqueante. Si la base de datos tarda 100ms, el hilo de ejecución queda libre para atender otras peticiones.
+
+Redis (Reactive): Lo usas como una Capa de Idempotencia. Al estar en RAM, la validación de si una transacción es duplicada ocurre en microsegundos.
+
+R2DBC (Reactive Relational Database Connectivity): Es el driver que permite que PostgreSQL hable "idioma reactivo", eliminando el cuello de botella del JDBC tradicional.
+
+3. Patrones de Diseño Aplicados (Nivel Senior)
+Aquí es donde brilla tu arquitectura para el README:
+
+Idempotency Key Pattern: Implementado en IdempotencyServiceImpl. Garantiza que, aunque el cliente envíe la misma petición 10 veces, el banco solo la procese una vez.
+
+Transactional Outbox Pattern: Asegura la consistencia entre la base de datos y Kafka. Evita el problema de "guardé en DB pero no pude avisar por Kafka".
+
+Distributed Tracing (Observabilidad): Mediante el uso de Tracer (Micrometer), cada transacción lleva un ADN (Trace ID) que te permite ver en un log exactamente qué pasó desde que entró al Controller hasta que salió el evento.
+
+Separación de DTOs y Entidades: Usas objetos distintos para la API (RequestDTO), la Base de Datos (Entity) y los Mensajes (Event). Esto permite que la base de datos cambie sin romper el contrato con Kafka.
+
+
+Validación de Tipo Robusta: En lugar de aceptar cualquier String y que el sistema explote al intentar convertirlo a un Enum, has creado una anotación personalizada (@ValueInEnum).
+
+Reutilización: Este validador es genérico. Lo usas para CurrencyType, OperationType y ChannelType. Esto reduce la duplicidad de código y centraliza la lógica de validación de catálogos.
+
+Seguridad en la Frontera: Al validar en el DTO (usando Bean Validation), detienes las peticiones malformadas en el Controller, antes de que lleguen a la lógica de negocio o a la base de datos.
+
+
+Análisis de Resiliencia y Tuning (Cierre del Servicio)
+Lo más destacable de tu configuración no es solo que funcione, sino cómo manejas el fallo:
+
+Timeouts Agresivos (Fail-Fast):
+
+Has configurado lock_timeout y statement_timeout en 2000ms. En un sistema de fraude, es mejor fallar rápido y dejar que el sistema de contingencia actúe a que un hilo se quede colgado esperando a la base de datos, degradando todo el sistema.
+
+Kafka Resilience Engine:
+
+spring.kafka.producer.properties.enable.idempotence=true: Esto es oro. Junto con tu lógica de IdempotencyService, garantizas que la duplicidad no ocurra ni en la aplicación ni en el broker de mensajería.
+
+max.block.ms=2000: Evitas que el envío de un mensaje a Kafka bloquee tu flujo reactivo más allá de 2 segundos.
+
+Observabilidad Integrada:
+
+El uso de management.tracing.sampling.probability=1.0 (100% de muestreo) es perfecto para este laboratorio, ya que te permite ver el trazo exacto de cada transacción en herramientas como Dynatrace o Zipkin sin perder ni una sola.
+
+Lo que ya tengo "mapeado" de tu fraud-detection-service:
+Capa de Entrada (API & Security):
+
+Controlador: TransactionController (Reactivo, OpenAPI/Swagger).
+
+Seguridad: SecurityConfig (Resource Server OAuth2) y SecurityExceptionHandler (Manejo de 401/403 estandarizado).
+
+Validación: El motor de validación personalizada con ValueInEnum para garantizar integridad de datos financieros desde el DTO.
+
+Capa de Negocio (The Core):
+
+Lógica Principal: FraudServiceImpl. Sé exactamente cómo orquestas la validación de límites contra Postgres y la verificación de duplicados contra Redis.
+
+Idempotencia: IdempotencyServiceImpl. Tengo claro el flujo de "Check en Redis -> Procesar -> Guardar en Redis".
+
+Capa de Persistencia y Resiliencia (Data & Messaging):
+
+Base de Datos: El init.sql con tipos DECIMAL correctos e índices.
+
+Repositorios: Uso de ReactiveCrudRepository para evitar bloqueos.
+
+Patrón Outbox: El OutboxScheduler y la OutboxEventEntity. Entiendo cómo recuperas eventos fallidos de Kafka.
+
+Kafka: El FraudEventProducer y su configuración de idempotencia y timeouts en el properties.
+
+Capa de Observabilidad:
+
+CorrelationFilter y ObservationConfig para que el Trace ID no se pierda entre los hilos de WebFlux.
+
+
+¿Se escapa algo? No, porque he identificado estos "Golden Nuggets":
+Java 21: No solo lo mencionas, lo usas en el POM.
+
+Separación de Conceptos: Usas DTOs para la API, Entities para DB y Events para Kafka. Eso es Clean Architecture.
+
+Estandarización Bancaria: El uso del campo responseCode (ej. "00" para aprobado, "51" para límite excedido) es un detalle de alguien que conoce el sector (ISO 8583).
+
+Veredicto: Tengo información más que suficiente para generar un README que destaque no solo el código, sino las decisiones de diseño (Trade-offs) que tomaste.

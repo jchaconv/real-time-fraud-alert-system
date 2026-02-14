@@ -1,0 +1,17 @@
+Lo que destaca en tu init.sql (Database Design)
+Uso de Tipos de Datos Financieros:
+
+Utilizas DECIMAL(18, 4) para montos y límites. Esto es crítico. Usar FLOAT o DOUBLE en banca es un pecado capital debido a los errores de redondeo binario. El uso de 4 decimales permite precisión para tasas de cambio o cálculos de intereses sin pérdida de datos.
+
+Optimización para Búsquedas (INDEXES):
+
+Has creado índices estratégicos como idx_transactions_customer_id e idx_transactions_status. En un sistema de fraude que consulta el historial del cliente para validar reglas, estos índices previenen Full Table Scans y mantienen la latencia baja.
+
+Preparado para JSONB (PostgreSQL Power):
+
+La tabla outbox_events usa la columna payload (que en Postgres se mapea a JSONB). Esto es excelente para el Transactional Outbox Pattern, ya que permite que el esquema del evento evolucione sin necesidad de cambiar la estructura de la base de datos (esquema flexible).
+
+Trazabilidad y Auditoría:
+
+Todas las tablas incluyen created_at y updated_at. En auditorías bancarias, saber exactamente cuándo cambió un límite o cuándo se registró una transacción es el primer requisito.
+

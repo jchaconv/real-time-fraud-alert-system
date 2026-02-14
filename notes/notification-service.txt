@@ -1,0 +1,45 @@
+Análisis de Ingeniería: notification-service
+Resiliencia con Dead Letter Topics (DLT):
+
+Tu configuración en KafkaConsumerConfig es impecable. Usar un DefaultErrorHandler con un FixedBackOff (3 reintentos cada 2s) y un DeadLetterPublishingRecoverer es la forma correcta de manejar fallos en banca.
+
+Si la notificación falla definitivamente, el mensaje no se pierde, va al .DLT. Esto es vital para auditoría y re-procesamiento manual.
+
+Manejo de Deserialización Robusta:
+
+En el application.yml, veo que usas ErrorHandlingDeserializer. Esto evita el famoso "poison pill" (un mensaje mal formado que bloquea al consumidor para siempre). Si falla la deserialización, el error se captura sin detener el servicio.
+
+Trazabilidad y Contexto (MDC):
+
+En TransactionEventConsumer, haces algo muy valioso: MDC.put(CORRELATION_ID_KEY, event.getCorrelationId()).
+
+Dado que Kafka no propaga automáticamente el contexto de hilos como lo hace HTTP, tu propagación manual asegura que los logs de este servicio estén vinculados al Trace ID original que generó el auth-server o el fraud-service.
+
+Simulación de Fallos de Negocio:
+
+Me gusta que en NotificationServiceImpl hayas incluido una lógica de fallo simulado para transacciones mayores a 500. Esto te permite probar precisamente que el flujo de reintentos y el DLT que configuraste en Kafka realmente funcionen.
+
+El Flujo Completo (The Big Picture)
+Ahora que tengo todos los servicios, así es como visualizo tu ecosistema para el README:
+
+Auth Server: Emite el JWT y establece la identidad.
+
+Fraud Detection Service (The Brain):
+
+Recibe la transacción.
+
+Valida contra Redis (Idempotencia).
+
+Valida contra PostgreSQL (Límites diarios).
+
+Persiste el resultado.
+
+Usa el Outbox Pattern para asegurar que el evento llegue a Kafka pase lo que pase.
+
+Notification Service (The End):
+
+Consume el evento de Kafka de forma segura.
+
+Propaga la trazabilidad.
+
+Ejecuta la lógica de notificación con políticas de reintento y recuperación.

@@ -1,0 +1,32 @@
+Tecnologías:
+- Java 21
+- Spring Boot 3.5.10
+- Spring Authorization Server (Implementación oficial).
+- Nimbus JOSE + JWT: Para el manejo de criptografía y tokens.
+
+Funcionalidades:
+
+- Emisión de JWT (JSON Web Tokens): Tokens firmados digitalmente.
+- Endpoint JWKS: Exposición de llaves públicas para validación descentralizada.
+- OIDC Discovery: Soporte para OpenID Connect 1.0.
+- Client Authentication: Soporte para autenticación básica de clientes (ID y Secret).
+
+Patrones de Diseño y Seguridad:
+
+- Centralized Identity Management: Un solo punto de verdad para la identidad.
+- In-Memory Storage: Tanto clientes como usuarios residen en la RAM (ideal para pruebas rápidas y microservicios efímeros).
+- Asymmetric Encryption (RSA): Uso de llaves públicas/privadas para máxima seguridad sin compartir secretos.
+
+OAuth2 Grant Types Soportados:
+
+- client_credentials: Ideal para comunicación Machine-to-Machine (ej. procesos batch o servicios internos).
+- refresh_token: Permite obtener nuevos tokens de acceso sin volver a pedir credenciales.
+
+
+Ficha Técnica: auth-server (Finalizada)
+Descripción: Servidor de Identidad Centralizado (IdP) basado en el protocolo OAuth2 y OpenID Connect (OIDC).
+Responsabilidad: Autenticar al microservicio de fraude y emitir tokens de acceso (JWT) firmados para asegurar la comunicación Machine-to-Machine (M2M).
+Stack Tecnológico: Spring Boot 3, Spring Authorization Server, Nimbus JOSE/JWT.
+Seguridad: Criptografía asimétrica con par de llaves RSA de 2048 bits generadas dinámicamente al arranque.
+Patrones: Identity Provider, Token-Based Authentication, In-Memory Repository (para prototipado rápido).
+
